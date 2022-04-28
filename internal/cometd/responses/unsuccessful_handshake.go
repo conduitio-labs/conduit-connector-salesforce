@@ -1,8 +1,8 @@
 package responses
 
-// UnsuccessfulHandshakeResponse represents the handshake failure response.
+// UnsuccessfulHandshakeResponseError represents the handshake failure response.
 // See: https://docs.cometd.org/current7/reference/#_unsuccessful_handshake_response
-type UnsuccessfulHandshakeResponse struct {
+type UnsuccessfulHandshakeResponseError struct {
 	Channel                  string   `json:"channel"`
 	Successful               bool     `json:"successful"`
 	ErrorDetails             string   `json:"error"`
@@ -14,6 +14,6 @@ type UnsuccessfulHandshakeResponse struct {
 	ID                       string   `json:"id,omitempty"`
 }
 
-func (e UnsuccessfulHandshakeResponse) Error() string {
+func (e UnsuccessfulHandshakeResponseError) Error() string {
 	return e.ErrorDetails
 }

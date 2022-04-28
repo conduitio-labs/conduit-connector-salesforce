@@ -1,6 +1,7 @@
 package oauth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -48,7 +49,7 @@ type Client struct {
 	securityToken string
 }
 
-func (a *Client) Authenticate() (response.TokenResponse, error) {
+func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, error) {
 	payload := url.Values{
 		"grant_type":    {grantType},
 		"client_id":     {a.clientID},
@@ -67,7 +68,7 @@ func (a *Client) Authenticate() (response.TokenResponse, error) {
 	body := strings.NewReader(payload.Encode())
 
 	// Build Request
-	req, err := http.NewRequest("POST", uri, body)
+	req, err := http.NewRequestWithContext(ctx, "POST", uri, body)
 	if err != nil {
 		return response.TokenResponse{}, fmt.Errorf("failed to prepare authentication request: %w", err)
 	}
@@ -88,6 +89,8 @@ func (a *Client) Authenticate() (response.TokenResponse, error) {
 		return response.TokenResponse{}, fmt.Errorf("could not read response data: %w", err)
 	}
 
+	resp.Body.Close()
+
 	fmt.Println("OAuth response", string(respBytes))
 
 	// Attempt to parse successful response
@@ -97,7 +100,7 @@ func (a *Client) Authenticate() (response.TokenResponse, error) {
 	}
 
 	// Attempt to parse response as a force.com api error
-	authFailureResponse := response.FailureResponse{}
+	authFailureResponse := response.FailureResponseError{}
 
 	if err := json.Unmarshal(respBytes, &authFailureResponse); err != nil {
 		return response.TokenResponse{}, fmt.Errorf("unable to process authentication response: %w", err)

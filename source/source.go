@@ -53,7 +53,7 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 		s.config.SecurityToken,
 	)
 
-	token, err := oAuthClient.Authenticate()
+	token, err := oAuthClient.Authenticate(ctx)
 	if err != nil {
 		return fmt.Errorf("could not authenticate: %w", err)
 	}
@@ -68,12 +68,12 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	}
 
 	// Handshake
-	if _, err := s.streamingClient.Handshake(); err != nil {
+	if _, err := s.streamingClient.Handshake(ctx); err != nil {
 		return fmt.Errorf("handshake error: %w", err)
 	}
 
 	// Subscribe to topic
-	subscribeResponse, err := s.streamingClient.SubscribeToPushTopic(s.config.PushTopicName)
+	subscribeResponse, err := s.streamingClient.SubscribeToPushTopic(ctx, s.config.PushTopicName)
 	if err != nil {
 		return fmt.Errorf("subscribe error: %w", err)
 	}
@@ -131,7 +131,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	fmt.Printf("Teardown")
 
 	// Unsubscribe
-	unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(s.config.PushTopicName)
+	unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, s.config.PushTopicName)
 	if err != nil {
 		sdk.Logger(ctx).Warn().Msgf("unsubscribe error: %s", err)
 	} else if !unsubscribeResponse.Successful {
@@ -139,7 +139,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	}
 
 	// Disconnect
-	disconnectResponse, err := s.streamingClient.Disconnect()
+	disconnectResponse, err := s.streamingClient.Disconnect(ctx)
 	if err != nil {
 		return fmt.Errorf("disconnect error: %w", err)
 	}
@@ -158,7 +158,7 @@ func (s *Source) eventsWorker(ctx context.Context) {
 
 	for {
 		// Receive event
-		connectResponse, err := s.streamingClient.Connect()
+		connectResponse, err := s.streamingClient.Connect(ctx)
 		if err != nil {
 			s.errors <- fmt.Errorf("failed to receive event: %w", err)
 
@@ -182,7 +182,7 @@ func (s *Source) eventsWorker(ctx context.Context) {
 
 			case responses.AdviceReconnectHandshake:
 				// Handshake and retry
-				if _, err := s.streamingClient.Handshake(); err != nil {
+				if _, err := s.streamingClient.Handshake(ctx); err != nil {
 					s.errors <- fmt.Errorf("reconnect handshake error: %w", err)
 
 					return

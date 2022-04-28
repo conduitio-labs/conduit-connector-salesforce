@@ -8,8 +8,6 @@ import (
 )
 
 func DecodeHTTPResponse(response *http.Response) ([]byte, error) {
-	defer response.Body.Close()
-
 	var reader io.ReadCloser
 	switch encoding := response.Header.Get("Content-Encoding"); encoding {
 	case "gzip":
