@@ -14,7 +14,7 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-func NewClient(baseUrl, accessToken string) (*Client, error) {
+func NewClient(baseURL, accessToken string) (*Client, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
@@ -23,16 +23,16 @@ func NewClient(baseUrl, accessToken string) (*Client, error) {
 	}
 
 	return &Client{
-		baseUrl:        baseUrl,
+		baseURL:        baseURL,
 		accessToken:    accessToken,
 		longPollClient: &http.Client{Jar: jar},
 	}, nil
 }
 
 type Client struct {
-	baseUrl        string
+	baseURL        string
 	accessToken    string
-	clientId       string
+	clientID       string
 	longPollClient *http.Client
 }
 
@@ -45,7 +45,7 @@ func (s *Client) Handshake() (responses.SuccessfulHandshakeResponse, error) {
 	// Assume the handshake was successful
 	var successfulResponses []responses.SuccessfulHandshakeResponse
 	if err := json.Unmarshal(responseData, &successfulResponses); err == nil && len(successfulResponses) > 0 {
-		s.clientId = successfulResponses[0].ClientId
+		s.clientID = successfulResponses[0].ClientID
 
 		return successfulResponses[0], nil
 	}
@@ -64,7 +64,7 @@ func (s *Client) Handshake() (responses.SuccessfulHandshakeResponse, error) {
 func (s *Client) Connect() (responses.ConnectResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(requests.ConnectRequest{
-		ClientId: s.clientId,
+		ClientID: s.clientID,
 	})
 	if err != nil {
 		return responses.ConnectResponse{}, fmt.Errorf("unable to perform connect request: %w", err)
@@ -103,7 +103,7 @@ func (s *Client) Connect() (responses.ConnectResponse, error) {
 		}
 
 		// Unmarshal response data
-		if connectResponse.ClientId != "" {
+		if connectResponse.ClientID != "" {
 			return responses.ConnectResponse{}, fmt.Errorf("unable to process connect response: multiple responses returned by the server")
 		}
 
@@ -123,7 +123,7 @@ func (s *Client) Connect() (responses.ConnectResponse, error) {
 
 func (s *Client) SubscribeToPushTopic(pushTopic string) (responses.SubscribeResponse, error) {
 	responseData, err := s.httpPost(requests.SubscribePushTopicRequest{
-		ClientId:  s.clientId,
+		ClientID:  s.clientID,
 		PushTopic: pushTopic,
 	})
 	if err != nil {
@@ -142,7 +142,7 @@ func (s *Client) SubscribeToPushTopic(pushTopic string) (responses.SubscribeResp
 
 func (s *Client) UnsubscribeToPushTopic(pushTopic string) (responses.UnsubscribeResponse, error) {
 	responseData, err := s.httpPost(requests.UnsubscribePushTopicRequest{
-		ClientId:  s.clientId,
+		ClientID:  s.clientID,
 		PushTopic: pushTopic,
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func (s *Client) UnsubscribeToPushTopic(pushTopic string) (responses.Unsubscribe
 
 func (s *Client) Disconnect() (responses.DisconnectResponse, error) {
 	responseData, err := s.httpPost(requests.DisconnectRequest{
-		ClientId: s.clientId,
+		ClientID: s.clientID,
 	})
 	if err != nil {
 		return responses.DisconnectResponse{}, fmt.Errorf("unable to perform disconnect request: %w", err)
@@ -190,7 +190,7 @@ func (s *Client) httpPost(payload requests.Request) ([]byte, error) {
 
 	request, err := http.NewRequest(
 		"POST",
-		s.baseUrl,
+		s.baseURL,
 		&buff,
 	)
 	if err != nil {
@@ -208,7 +208,7 @@ func (s *Client) httpPost(payload requests.Request) ([]byte, error) {
 		return nil, err
 	}
 
-	respBytes, err := utils.DecodeHttpResponse(resp)
+	respBytes, err := utils.DecodeHTTPResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("could not read response data: %w", err)
 	}

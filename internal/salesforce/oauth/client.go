@@ -23,7 +23,7 @@ const (
 
 func NewClient(
 	environment Environment,
-	clientId string,
+	clientID string,
 	clientSecret string,
 	username string,
 	password string,
@@ -31,7 +31,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		environment:   environment,
-		clientId:      clientId,
+		clientID:      clientID,
 		clientSecret:  clientSecret,
 		username:      username,
 		password:      password,
@@ -41,7 +41,7 @@ func NewClient(
 
 type Client struct {
 	environment   Environment
-	clientId      string
+	clientID      string
 	clientSecret  string
 	username      string
 	password      string
@@ -51,7 +51,7 @@ type Client struct {
 func (a *Client) Authenticate() (response.TokenResponse, error) {
 	payload := url.Values{
 		"grant_type":    {grantType},
-		"client_id":     {a.clientId},
+		"client_id":     {a.clientID},
 		"client_secret": {a.clientSecret},
 		"username":      {a.username},
 		"password":      {fmt.Sprintf("%v%v", a.password, a.securityToken)},
@@ -83,7 +83,7 @@ func (a *Client) Authenticate() (response.TokenResponse, error) {
 		return response.TokenResponse{}, fmt.Errorf("failed to send authentication request: %w", err)
 	}
 
-	respBytes, err := utils.DecodeHttpResponse(resp)
+	respBytes, err := utils.DecodeHTTPResponse(resp)
 	if err != nil {
 		return response.TokenResponse{}, fmt.Errorf("could not read response data: %w", err)
 	}

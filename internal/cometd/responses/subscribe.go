@@ -11,8 +11,8 @@ type SubscribeResponse struct {
 	Error        string      `json:"error,omitempty"`
 	Advice       *advice     `json:"advice,omitempty"`
 	Ext          *ext        `json:"ext,omitempty"`
-	ClientId     string      `json:"clientId,omitempty"`
-	Id           string      `json:"id,omitempty"`
+	ClientID     string      `json:"clientId,omitempty"`
+	ID           string      `json:"id,omitempty"`
 }
 
 func (s SubscribeResponse) GetSubscriptions() []string {

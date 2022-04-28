@@ -46,7 +46,7 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	// Authenticate
 	oAuthClient := oauth.NewClient(
 		s.config.Environment,
-		s.config.ClientId,
+		s.config.ClientID,
 		s.config.ClientSecret,
 		s.config.Username,
 		s.config.Password,
@@ -60,7 +60,7 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 
 	// Streaming API client
 	s.streamingClient, err = cometd.NewClient(
-		fmt.Sprintf("%s/cometd/%s", token.InstanceUrl, sfCometDVersion),
+		fmt.Sprintf("%s/cometd/%s", token.InstanceURL, sfCometDVersion),
 		token.AccessToken,
 	)
 	if err != nil {
@@ -108,7 +108,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			Payload:   sdk.StructuredData(event.Data.Sobject),
 			Metadata: map[string]string{
 				"channel":   event.Channel,
-				"replayId":  strconv.FormatInt(int64(event.Data.Event.ReplayId), 10),
+				"replayId":  strconv.FormatInt(int64(event.Data.Event.ReplayID), 10),
 				"eventType": event.Data.Event.Type,
 			},
 		}, nil

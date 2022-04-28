@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-func DecodeHttpResponse(response *http.Response) ([]byte, error) {
+func DecodeHTTPResponse(response *http.Response) ([]byte, error) {
 	defer response.Body.Close()
 
 	var reader io.ReadCloser

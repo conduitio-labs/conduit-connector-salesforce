@@ -11,7 +11,7 @@ type UnsuccessfulHandshakeResponse struct {
 	Version                  string   `json:"version,omitempty"`
 	MinimumVersion           string   `json:"minimumVersion,omitempty"`
 	Ext                      *ext     `json:"ext,omitempty"`
-	Id                       string   `json:"id,omitempty"`
+	ID                       string   `json:"id,omitempty"`
 }
 
 func (e UnsuccessfulHandshakeResponse) Error() string {

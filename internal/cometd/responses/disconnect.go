@@ -5,8 +5,8 @@ package responses
 type DisconnectResponse struct {
 	Channel    string `json:"channel"`
 	Successful bool   `json:"successful"`
-	ClientId   string `json:"clientId,omitempty"`
+	ClientID   string `json:"clientId,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Ext        *ext   `json:"ext,omitempty"`
-	Id         string `json:"id,omitempty"`
+	ID         string `json:"id,omitempty"`
 }

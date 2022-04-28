@@ -6,7 +6,7 @@ import (
 
 const (
 	ConfigKeyEnvironment   = "environment"
-	ConfigKeyClientId      = "clientId"
+	ConfigKeyClientID      = "clientId"
 	ConfigKeyClientSecret  = "clientSecret"
 	ConfigKeyUsername      = "username"
 	ConfigKeyPassword      = "password"
@@ -16,7 +16,7 @@ const (
 
 type Config struct {
 	Environment   string
-	ClientId      string
+	ClientID      string
 	ClientSecret  string
 	Username      string
 	Password      string
@@ -27,7 +27,7 @@ type Config struct {
 func ParseConfig(cfgRaw map[string]string) (Config, error) {
 	cfg := Config{
 		Environment:   cfgRaw[ConfigKeyEnvironment],
-		ClientId:      cfgRaw[ConfigKeyClientId],
+		ClientID:      cfgRaw[ConfigKeyClientID],
 		ClientSecret:  cfgRaw[ConfigKeyClientSecret],
 		Username:      cfgRaw[ConfigKeyUsername],
 		Password:      cfgRaw[ConfigKeyPassword],
@@ -37,8 +37,8 @@ func ParseConfig(cfgRaw map[string]string) (Config, error) {
 	if cfg.Environment == "" {
 		return Config{}, requiredConfigErr(ConfigKeyEnvironment)
 	}
-	if cfg.ClientId == "" {
-		return Config{}, requiredConfigErr(ConfigKeyClientId)
+	if cfg.ClientID == "" {
+		return Config{}, requiredConfigErr(ConfigKeyClientID)
 	}
 	if cfg.ClientSecret == "" {
 		return Config{}, requiredConfigErr(ConfigKeyClientSecret)

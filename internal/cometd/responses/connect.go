@@ -10,8 +10,8 @@ type ConnectResponse struct {
 	Error      string  `json:"error,omitempty"`
 	Advice     *advice `json:"advice,omitempty"`
 	Ext        *ext    `json:"ext,omitempty"`
-	ClientId   string  `json:"clientId,omitempty"`
-	Id         string  `json:"id,omitempty"`
+	ClientID   string  `json:"clientId,omitempty"`
+	ID         string  `json:"id,omitempty"`
 	Events     []ConnectResponseEvent
 }
 
@@ -19,7 +19,7 @@ type ConnectResponseEvent struct {
 	Data struct {
 		Event struct {
 			CreatedDate time.Time `json:"createdDate"`
-			ReplayId    int       `json:"replayId"`
+			ReplayID    int       `json:"replayId"`
 			Type        string    `json:"type"`
 		} `json:"event"`
 		Sobject map[string]interface{} `json:"sobject"`
