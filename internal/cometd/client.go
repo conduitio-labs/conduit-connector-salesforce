@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 
-	"github.com/conduitio/conduit-connector-salesforce/internal/cometd/requests"
-	"github.com/conduitio/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/conduitio/conduit-connector-salesforce/internal/utils"
+	"github.com/miquido/conduit-connector-salesforce/internal/cometd/requests"
+	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
+	"github.com/miquido/conduit-connector-salesforce/internal/utils"
 	"golang.org/x/net/publicsuffix"
 )
 

@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/conduitio/conduit-connector-salesforce/internal/cometd"
-	"github.com/conduitio/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/conduitio/conduit-connector-salesforce/internal/salesforce/oauth"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/miquido/conduit-connector-salesforce/internal/cometd"
+	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
+	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth"
 )
 
 const sfCometDVersion = "54.0"

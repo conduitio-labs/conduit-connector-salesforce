@@ -1,7 +1,7 @@
 # Conduit Connector Salesforce
 
 ## General
-The File plugin is one of [Conduit](https://github.com/ConduitIO/conduit) builtin plugins.
+The Salesforce plugin is one of [Conduit](https://github.com/ConduitIO/conduit) builtin plugins.
 It currently provides only source Salesforce connector, allowing for receiving Salesforce changes events in a Conduit pipeline.
 
 ## How to build it

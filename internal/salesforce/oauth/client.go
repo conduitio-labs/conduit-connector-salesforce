@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/conduitio/conduit-connector-salesforce/internal/salesforce/oauth/response"
-	"github.com/conduitio/conduit-connector-salesforce/internal/utils"
+	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth/response"
+	"github.com/miquido/conduit-connector-salesforce/internal/utils"
 )
 
 type Environment = string
