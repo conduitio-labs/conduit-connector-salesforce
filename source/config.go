@@ -56,7 +56,7 @@ func ParseConfig(cfgRaw map[string]string) (Config, error) {
 		return Config{}, requiredConfigErr(ConfigKeyPushTopicName)
 	}
 	if cfg.KeyField == "" {
-		// return Config{}, requiredConfigErr(ConfigKeyKeyField)
+		return Config{}, requiredConfigErr(ConfigKeyKeyField)
 	}
 
 	return cfg, nil
