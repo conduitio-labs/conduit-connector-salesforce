@@ -91,8 +91,6 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 
 	resp.Body.Close()
 
-	fmt.Println("OAuth response", string(respBytes))
-
 	// Attempt to parse successful response
 	var token response.TokenResponse
 	if err := json.Unmarshal(respBytes, &token); err == nil {

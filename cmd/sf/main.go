@@ -2,10 +2,10 @@ package main
 
 import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/miquido/conduit-connector-salesforce"
-	"github.com/miquido/conduit-connector-salesforce/source"
+	sf "github.com/miquido/conduit-connector-salesforce"
+	sfSource "github.com/miquido/conduit-connector-salesforce/source"
 )
 
 func main() {
-	sdk.Serve(salesforce.Specification, source.NewSource, nil)
+	sdk.Serve(sf.Specification, sfSource.NewSource, nil)
 }

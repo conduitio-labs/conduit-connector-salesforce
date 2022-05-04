@@ -33,16 +33,12 @@ func NewSource() sdk.Source {
 }
 
 func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err error) {
-	fmt.Printf("Configure")
-
 	s.config, err = ParseConfig(cfgRaw)
 
 	return
 }
 
 func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
-	fmt.Printf("Open")
-
 	// Authenticate
 	oAuthClient := oauth.NewClient(
 		s.config.Environment,
@@ -95,8 +91,6 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 }
 
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
-	fmt.Printf("Read")
-
 	select {
 	case event, ok := <-s.events:
 		if !ok {
@@ -114,9 +108,9 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			Position:  sdk.Position(keyValue),
 			CreatedAt: event.Data.Event.CreatedDate,
 			Metadata: map[string]string{
-				"channel":   event.Channel,
-				"replayId":  strconv.FormatInt(int64(event.Data.Event.ReplayID), 10),
-				"eventType": event.Data.Event.Type,
+				"channel":  event.Channel,
+				"replayId": strconv.FormatInt(int64(event.Data.Event.ReplayID), 10),
+				"action":   event.Data.Event.Type,
 			},
 		}, nil
 
@@ -129,14 +123,10 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 }
 
 func (s *Source) Ack(_ context.Context, _ sdk.Position) error {
-	fmt.Printf("Ack")
-
 	return nil // no ack needed
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	fmt.Printf("Teardown")
-
 	// Unsubscribe
 	unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, s.config.PushTopicName)
 	if err != nil {
