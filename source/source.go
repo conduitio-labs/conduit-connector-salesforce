@@ -111,6 +111,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{
 			Key:       keyValue,
 			Payload:   sdk.StructuredData(event.Data.Sobject),
+			Position:  sdk.Position(keyValue),
 			CreatedAt: event.Data.Event.CreatedDate,
 			Metadata: map[string]string{
 				"channel":   event.Channel,
