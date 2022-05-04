@@ -49,6 +49,11 @@ func Specification() sdk.Specification {
 				Required:    true,
 				Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
 			},
+			"keyField": {
+				Default:     "id",
+				Required:    true,
+				Description: "The name of the data Key field.",
+			},
 		},
 	}
 }

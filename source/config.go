@@ -12,6 +12,7 @@ const (
 	ConfigKeyPassword      = "password"
 	ConfigKeySecurityToken = "securityToken"
 	ConfigKeyPushTopicName = "pushTopicName"
+	ConfigKeyKeyField      = "keyField"
 )
 
 type Config struct {
@@ -22,6 +23,7 @@ type Config struct {
 	Password      string
 	SecurityToken string
 	PushTopicName string
+	KeyField      string
 }
 
 func ParseConfig(cfgRaw map[string]string) (Config, error) {
@@ -33,6 +35,7 @@ func ParseConfig(cfgRaw map[string]string) (Config, error) {
 		Password:      cfgRaw[ConfigKeyPassword],
 		SecurityToken: cfgRaw[ConfigKeySecurityToken],
 		PushTopicName: cfgRaw[ConfigKeyPushTopicName],
+		KeyField:      cfgRaw[ConfigKeyKeyField],
 	}
 	if cfg.Environment == "" {
 		return Config{}, requiredConfigErr(ConfigKeyEnvironment)
@@ -51,6 +54,9 @@ func ParseConfig(cfgRaw map[string]string) (Config, error) {
 	}
 	if cfg.PushTopicName == "" {
 		return Config{}, requiredConfigErr(ConfigKeyPushTopicName)
+	}
+	if cfg.KeyField == "" {
+		return Config{}, requiredConfigErr(ConfigKeyKeyField)
 	}
 
 	return cfg, nil

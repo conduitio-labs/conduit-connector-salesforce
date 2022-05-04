@@ -103,9 +103,15 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			return sdk.Record{}, fmt.Errorf("connection closed by the server")
 		}
 
+		keyValue, err := s.getKeyValue(event)
+		if err != nil {
+			return sdk.Record{}, err
+		}
+
 		return sdk.Record{
-			CreatedAt: event.Data.Event.CreatedDate,
+			Key:       keyValue,
 			Payload:   sdk.StructuredData(event.Data.Sobject),
+			CreatedAt: event.Data.Event.CreatedDate,
 			Metadata: map[string]string{
 				"channel":   event.Channel,
 				"replayId":  strconv.FormatInt(int64(event.Data.Event.ReplayID), 10),
@@ -213,4 +219,25 @@ func (s *Source) eventsWorker(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData, error) {
+	value, exists := event.Data.Sobject[s.config.KeyField]
+	if !exists {
+		return nil, fmt.Errorf("the %q field does not exist in the data", s.config.KeyField)
+	}
+
+	switch v := value.(type) {
+	case string:
+		return sdk.RawData(v), nil
+
+	case int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64:
+		return sdk.RawData(fmt.Sprintf("%d", v)), nil
+
+	case float32, float64:
+		return sdk.RawData(fmt.Sprintf("%G", v)), nil
+	}
+
+	return nil, fmt.Errorf("the %T type of Key field is not supported", value)
 }
