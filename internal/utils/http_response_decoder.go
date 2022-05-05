@@ -21,8 +21,13 @@ import (
 	"net/http"
 )
 
+// DecodeHTTPResponse reads response body and optionally un-compresses it.
 func DecodeHTTPResponse(response *http.Response) ([]byte, error) {
+	defer response.Body.Close()
+
 	var reader io.ReadCloser
+
+	// Detect compression method
 	switch encoding := response.Header.Get("Content-Encoding"); encoding {
 	case "gzip":
 		var err error
@@ -41,6 +46,7 @@ func DecodeHTTPResponse(response *http.Response) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported encoding %q", encoding)
 	}
 
+	// Read the body
 	contents, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("could not read response data: %w", err)

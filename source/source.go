@@ -166,6 +166,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	return nil
 }
 
+// eventsWorker continuously queries for data updates from Salesforce
 func (s *Source) eventsWorker(ctx context.Context) {
 	defer close(s.events)
 
@@ -188,6 +189,13 @@ func (s *Source) eventsWorker(ctx context.Context) {
 
 			switch connectResponse.Advice.Reconnect {
 			case responses.AdviceReconnectRetry:
+				// Check if request can be retried
+				if connectResponse.Advice.Interval < 0 {
+					s.errors <- fmt.Errorf("server disallowed for reconnect, stopping")
+
+					return
+				}
+
 				// Wait and retry
 				time.Sleep(time.Millisecond * time.Duration(connectResponse.Advice.Interval))
 
@@ -228,6 +236,7 @@ func (s *Source) eventsWorker(ctx context.Context) {
 	}
 }
 
+// getKeyValue prepares the Key value for Payload
 func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData, error) {
 	if s.config.KeyField == "" {
 		return nil, nil

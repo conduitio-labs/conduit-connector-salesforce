@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 
@@ -51,7 +50,10 @@ type Client struct {
 	longPollClient *http.Client
 }
 
+// Handshake performs a handshake request.
+// See: https://docs.cometd.org/current7/reference/#_bayeux_meta_handshake
 func (s *Client) Handshake(ctx context.Context) (responses.SuccessfulHandshakeResponse, error) {
+	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.HandshakeRequest{})
 	if err != nil {
 		return responses.SuccessfulHandshakeResponse{}, err
@@ -76,6 +78,8 @@ func (s *Client) Handshake(ctx context.Context) (responses.SuccessfulHandshakeRe
 	return responses.SuccessfulHandshakeResponse{}, unsuccessfulResponses[0]
 }
 
+// Connect performs a connect request.
+// See: https://docs.cometd.org/current7/reference/#_bayeux_meta_connect
 func (s *Client) Connect(ctx context.Context) (responses.ConnectResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.ConnectRequest{
@@ -136,7 +140,10 @@ func (s *Client) Connect(ctx context.Context) (responses.ConnectResponse, error)
 	return connectResponse, nil
 }
 
+// SubscribeToPushTopic performs a subscribe to topic request.
+// See: https://docs.cometd.org/current7/reference/#_bayeux_meta_subscribe
 func (s *Client) SubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.SubscribeResponse, error) {
+	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.SubscribePushTopicRequest{
 		ClientID:  s.clientID,
 		PushTopic: pushTopic,
@@ -145,6 +152,7 @@ func (s *Client) SubscribeToPushTopic(ctx context.Context, pushTopic string) (re
 		return responses.SubscribeResponse{}, fmt.Errorf("unable to perform subscribe request: %w", err)
 	}
 
+	// Assume is subscribed
 	var successfulResponses []responses.SubscribeResponse
 	if err := json.Unmarshal(responseData, &successfulResponses); err != nil {
 		return responses.SubscribeResponse{}, fmt.Errorf("unable to process subscribe response: %w", err)
@@ -155,7 +163,10 @@ func (s *Client) SubscribeToPushTopic(ctx context.Context, pushTopic string) (re
 	return successfulResponses[0], nil
 }
 
+// UnsubscribeToPushTopic performs a unsubscrive from topic request.
+// See: https://docs.cometd.org/current7/reference/#_bayeux_meta_unsubscribe
 func (s *Client) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error) {
+	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.UnsubscribePushTopicRequest{
 		ClientID:  s.clientID,
 		PushTopic: pushTopic,
@@ -164,6 +175,7 @@ func (s *Client) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (
 		return responses.UnsubscribeResponse{}, fmt.Errorf("unable to perform unsubscribe request: %w", err)
 	}
 
+	// Assert is unsubscribed
 	var successfulResponses []responses.UnsubscribeResponse
 	if err := json.Unmarshal(responseData, &successfulResponses); err != nil {
 		return responses.UnsubscribeResponse{}, fmt.Errorf("unable to process unsubscribe response: %w", err)
@@ -174,7 +186,10 @@ func (s *Client) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (
 	return successfulResponses[0], nil
 }
 
+// Disconnect performs a disconnect request.
+// See: https://docs.cometd.org/current7/reference/#_bayeux_meta_disconnect
 func (s *Client) Disconnect(ctx context.Context) (responses.DisconnectResponse, error) {
+	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.DisconnectRequest{
 		ClientID: s.clientID,
 	})
@@ -182,6 +197,7 @@ func (s *Client) Disconnect(ctx context.Context) (responses.DisconnectResponse, 
 		return responses.DisconnectResponse{}, fmt.Errorf("unable to perform disconnect request: %w", err)
 	}
 
+	// Assert is disconnected
 	var successfulResponses []responses.DisconnectResponse
 	if err := json.Unmarshal(responseData, &successfulResponses); err != nil {
 		return responses.DisconnectResponse{}, fmt.Errorf("unable to process disconnect response: %w", err)
@@ -192,7 +208,9 @@ func (s *Client) Disconnect(ctx context.Context) (responses.DisconnectResponse, 
 	return successfulResponses[0], nil
 }
 
+// httpPost sends a POST request to the CometD server
 func (s *Client) httpPost(ctx context.Context, payload requests.Request) ([]byte, error) {
+	// Prepare the payload
 	requestData, err := payload.MarshalJSON()
 	if err != nil {
 		return nil, err
@@ -201,8 +219,7 @@ func (s *Client) httpPost(ctx context.Context, payload requests.Request) ([]byte
 	var buff bytes.Buffer
 	buff.Write(requestData)
 
-	log.Printf("Request %T: %s", payload, buff.String())
-
+	// Prepare the Request
 	request, err := http.NewRequestWithContext(
 		ctx,
 		"POST",
@@ -213,25 +230,24 @@ func (s *Client) httpPost(ctx context.Context, payload requests.Request) ([]byte
 		return nil, err
 	}
 
+	// Add headers
 	request.Header.Set("Authorization", fmt.Sprintf("OAuth %s", s.accessToken))
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Accept-Encoding", "gzip;q=1.0, *;q=0.1")
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("User-Agent", "ConduitIO/Salesforce-v0.1.0")
 
+	// Execute the Request
 	resp, err := s.longPollClient.Do(request)
 	if err != nil {
 		return nil, err
 	}
 
+	// Read the body
 	respBytes, err := utils.DecodeHTTPResponse(resp)
 	if err != nil {
 		return nil, fmt.Errorf("could not read response data: %w", err)
 	}
-
-	resp.Body.Close()
-
-	log.Printf("Response %T: %s", payload, respBytes)
 
 	return respBytes, nil
 }

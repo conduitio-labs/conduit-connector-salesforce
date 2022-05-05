@@ -21,6 +21,7 @@ import (
 // DisconnectRequest represents disconnection request.
 // See: https://docs.cometd.org/current7/reference/#_disconnect_request
 type DisconnectRequest struct {
+	// ClientID is the client ID returned in the handshake response
 	ClientID string
 }
 

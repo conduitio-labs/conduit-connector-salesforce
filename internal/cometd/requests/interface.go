@@ -16,6 +16,7 @@ package requests
 
 import "encoding/json"
 
+// Request is a common interface for CometD requests
 type Request interface {
 	json.Marshaler
 }

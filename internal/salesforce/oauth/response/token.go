@@ -14,6 +14,7 @@
 
 package response
 
+// TokenResponse represents successful OAuth server response.
 type TokenResponse struct {
 	AccessToken string `json:"access_token"`
 	InstanceURL string `json:"instance_url"`

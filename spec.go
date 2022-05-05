@@ -64,7 +64,7 @@ func Specification() sdk.Specification {
 				Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
 			},
 			"keyField": {
-				Default:     "id",
+				Default:     "Id",
 				Required:    false,
 				Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
 			},

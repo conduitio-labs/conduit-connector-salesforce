@@ -63,7 +63,9 @@ type Client struct {
 	securityToken string
 }
 
+// Authenticate attempts to authenticate the client with given credentials
 func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, error) {
+	// Prepare request payload
 	payload := url.Values{
 		"grant_type":    {grantType},
 		"client_id":     {a.clientID},
@@ -72,7 +74,7 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 		"password":      {fmt.Sprintf("%v%v", a.password, a.securityToken)},
 	}
 
-	// Build Uri
+	// Build URI
 	uri := loginURI
 	if EnvironmentSandbox == a.environment {
 		uri = testLoginURI
@@ -93,17 +95,17 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", "ConduitIO/Salesforce-v0.1.0")
 
+	// Execute Request
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return response.TokenResponse{}, fmt.Errorf("failed to send authentication request: %w", err)
 	}
 
+	// Read the body
 	respBytes, err := utils.DecodeHTTPResponse(resp)
 	if err != nil {
 		return response.TokenResponse{}, fmt.Errorf("could not read response data: %w", err)
 	}
-
-	resp.Body.Close()
 
 	// Attempt to parse successful response
 	var token response.TokenResponse
@@ -111,9 +113,8 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 		return token, nil
 	}
 
-	// Attempt to parse response as a force.com api error
+	// Attempt to parse failure response
 	authFailureResponse := response.FailureResponseError{}
-
 	if err := json.Unmarshal(respBytes, &authFailureResponse); err != nil {
 		return response.TokenResponse{}, fmt.Errorf("unable to process authentication response: %w", err)
 	}

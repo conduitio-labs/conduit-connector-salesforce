@@ -14,6 +14,7 @@
 
 package response
 
+// FailureResponseError represents OAuth server failure response.
 type FailureResponseError struct {
 	ErrorName        string `json:"error"`
 	ErrorDescription string `json:"error_description"`

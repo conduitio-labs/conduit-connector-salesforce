@@ -19,16 +19,32 @@ import "time"
 // ConnectResponse represents connection response.
 // See: https://docs.cometd.org/current7/reference/#_connect_response
 type ConnectResponse struct {
-	Channel    string  `json:"channel"`
-	Successful bool    `json:"successful"`
-	Error      string  `json:"error,omitempty"`
-	Advice     *advice `json:"advice,omitempty"`
-	Ext        *ext    `json:"ext,omitempty"`
-	ClientID   string  `json:"clientId,omitempty"`
-	ID         string  `json:"id,omitempty"`
-	Events     []ConnectResponseEvent
+	// Channel value MUST be `/meta/connect`
+	Channel string `json:"channel"`
+
+	// Successful is a boolean indicating the success or failure of the connection
+	Successful bool `json:"successful"`
+
+	// Error is a description of the reason for the failure
+	Error string `json:"error,omitempty"`
+
+	// Advice is the `advice` object
+	Advice *advice `json:"advice,omitempty"`
+
+	// Ext is the `ext` object
+	Ext *ext `json:"ext,omitempty"`
+
+	// ClientID is the client ID returned in the handshake response
+	ClientID string `json:"clientId,omitempty"`
+
+	// ID is the same value as request message id
+	ID string `json:"id,omitempty"`
+
+	// Events is an array of data returned in the response
+	Events []ConnectResponseEvent
 }
 
+// ConnectResponseEvent represents single piece of data returend in connect response
 type ConnectResponseEvent struct {
 	Data struct {
 		Event struct {

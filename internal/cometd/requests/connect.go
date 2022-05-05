@@ -19,6 +19,7 @@ import "encoding/json"
 // ConnectRequest represents connection request.
 // See: https://docs.cometd.org/current7/reference/#_connect_request
 type ConnectRequest struct {
+	// ClientID is the client ID returned in the handshake response
 	ClientID string
 }
 

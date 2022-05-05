@@ -22,7 +22,11 @@ import (
 // UnsubscribePushTopicRequest represents unsubscribing to push topic request.
 // See: https://docs.cometd.org/current7/reference/#_unsubscribe_request
 type UnsubscribePushTopicRequest struct {
-	ClientID  string
+	// ClientID is the client ID returned in the handshake response
+	ClientID string
+
+	// PushTopic is a channel name to unsubscribe from.
+	// Will be prefixed with `/topic/` value.
 	PushTopic string
 }
 

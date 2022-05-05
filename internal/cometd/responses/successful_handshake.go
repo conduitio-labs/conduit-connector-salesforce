@@ -17,14 +17,34 @@ package responses
 // SuccessfulHandshakeResponse represents the handshake success response.
 // See: https://docs.cometd.org/current7/reference/#_successful_handshake_response
 type SuccessfulHandshakeResponse struct {
-	Channel                  string   `json:"channel"`
-	Version                  string   `json:"version"`
+	// Channel value MUST be `/meta/handshake`
+	Channel string `json:"channel"`
+
+	// Version is the version of the protocol that was negotiated
+	Version string `json:"version"`
+
+	// SupportedConnectionTypes is a list of connection types supported by the server for the purposes of the connection being negotiated
 	SupportedConnectionTypes []string `json:"supportedConnectionTypes,omitempty"`
-	ClientID                 string   `json:"clientId"`
-	Successful               bool     `json:"successful"`
-	MinimumVersion           string   `json:"minimumVersion,omitempty"`
-	Advice                   *advice  `json:"advice,omitempty"`
-	Ext                      *ext     `json:"ext,omitempty"`
-	ID                       string   `json:"id,omitempty"`
-	AuthSuccessful           bool     `json:"authSuccessful,omitempty"`
+
+	// ClientID is a newly generated unique ID string
+	ClientID string `json:"clientId"`
+
+	// Successful value is `true`
+	Successful bool `json:"successful"`
+
+	// MinimumVersion defines minimum version of the protocol supported by the server
+	MinimumVersion string `json:"minimumVersion,omitempty"`
+
+	// Advice is the `advice` object
+	Advice *advice `json:"advice,omitempty"`
+
+	// Ext is the `ext` object
+	Ext *ext `json:"ext,omitempty"`
+
+	// ID is the same value as request message id
+	ID string `json:"id,omitempty"`
+
+	// AuthSuccessful value is `true`.
+	// This field MAY be included to support prototype client implementations that required the authSuccessful field
+	AuthSuccessful bool `json:"authSuccessful,omitempty"`
 }

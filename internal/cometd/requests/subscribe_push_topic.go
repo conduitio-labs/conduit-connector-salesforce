@@ -22,7 +22,11 @@ import (
 // SubscribePushTopicRequest represents subscribing to push topic request.
 // See: https://docs.cometd.org/current7/reference/#_subscribe_request
 type SubscribePushTopicRequest struct {
-	ClientID  string
+	// ClientID is the client ID returned in the handshake response
+	ClientID string
+
+	// PushTopic is a channel name to subscribe to.
+	// Will be prefixed with `/topic/` value.
 	PushTopic string
 }
 

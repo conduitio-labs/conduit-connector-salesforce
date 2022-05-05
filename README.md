@@ -1,10 +1,12 @@
 # Conduit Connector Salesforce
 
 ## General
+
 The Salesforce plugin is one of [Conduit](https://github.com/ConduitIO/conduit) builtin plugins.
 It currently provides only source Salesforce connector, allowing for receiving Salesforce changes events in a Conduit pipeline.
 
 ## How to build it
+
 Run `make`.
 
 ## Source
@@ -21,7 +23,8 @@ The Source connector subscribed to given topic and listens for events published 
 | `username`      | Username.                                                                                                                                                     | true     |         |
 | `password`      | Password.                                                                                                                                                     | true     |         |
 | `securityToken` | Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.                                             | false    |         |
-| `pushTopicName` | The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.                                                          | true     |         |
+| `pushTopicName` | The name of the Push Topic to listen to. This value will be prefixed with `/topic/`.                                                                          | true     |         |
+| `keyField`      | The name of the Response's field that should be used as a Payload's Key. Empty value will set it to `nil`.                                                    | false    | Id      |
 
 ## Destination
 

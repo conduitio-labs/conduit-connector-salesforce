@@ -17,15 +17,32 @@ package responses
 // UnsuccessfulHandshakeResponseError represents the handshake failure response.
 // See: https://docs.cometd.org/current7/reference/#_unsuccessful_handshake_response
 type UnsuccessfulHandshakeResponseError struct {
-	Channel                  string   `json:"channel"`
-	Successful               bool     `json:"successful"`
-	ErrorDetails             string   `json:"error"`
+	// Channel value MUST be `/meta/handshake`
+	Channel string `json:"channel"`
+
+	// Successful value is `false`
+	Successful bool `json:"successful"`
+
+	// ErrorDetails is a description of the reason for the failure
+	ErrorDetails string `json:"error"`
+
+	// SupportedConnectionTypes is a list of connection types supported by the server for the purposes of the connection being negotiated
 	SupportedConnectionTypes []string `json:"supportedConnectionTypes,omitempty"`
-	Advice                   *advice  `json:"advice,omitempty"`
-	Version                  string   `json:"version,omitempty"`
-	MinimumVersion           string   `json:"minimumVersion,omitempty"`
-	Ext                      *ext     `json:"ext,omitempty"`
-	ID                       string   `json:"id,omitempty"`
+
+	// Advice is the `advice` object
+	Advice *advice `json:"advice,omitempty"`
+
+	// Version is the version of the protocol that was negotiated
+	Version string `json:"version,omitempty"`
+
+	// MinimumVersion defines minimum version of the protocol supported by the server
+	MinimumVersion string `json:"minimumVersion,omitempty"`
+
+	// Ext is the `ext` object
+	Ext *ext `json:"ext,omitempty"`
+
+	// ID is the same value as request message id
+	ID string `json:"id,omitempty"`
 }
 
 func (e UnsuccessfulHandshakeResponseError) Error() string {

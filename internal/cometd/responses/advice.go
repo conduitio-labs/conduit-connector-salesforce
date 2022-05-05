@@ -25,18 +25,24 @@ const (
 // advice provides a way for servers to inform clients of their preferred mode of client operation so that in conjunction with server-enforced limits, Bayeux implementations can prevent resource exhaustion and inelegant failure modes.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_advice
 type advice struct {
-	// Reconnect https://docs.cometd.org/current7/reference/#_reconnect_advice_field
+	// Reconnect indicates how the client should act in the case of a failure to connect.
+	// See: https://docs.cometd.org/current7/reference/#_reconnect_advice_field
 	Reconnect AdviceReconnect `json:"reconnect,omitempty"`
 
-	// Timeout https://docs.cometd.org/current7/reference/#_timeout_advice_field
+	// Timeout represents the period of time, in milliseconds, for the server to delay responses to the `/meta/connect` channel.
+	// See: https://docs.cometd.org/current7/reference/#_timeout_advice_field
 	Timeout int `json:"timeout,omitempty"`
 
-	// Interval https://docs.cometd.org/current7/reference/#_interval_advice_field
+	// Interval represents the minimum period of time, in milliseconds, for a client to delay subsequent requests to the `/meta/connect` channel.
+	// A negative period indicates that the message should not be retried.
+	// See: https://docs.cometd.org/current7/reference/#_interval_advice_field
 	Interval int `json:"interval,omitempty"`
 
-	// MultipleClients https://docs.cometd.org/current7/reference/#_bayeux_multiple_clients_advice
+	// MultipleClients is a boolean field, which when true indicates that the server has detected multiple Bayeux client instances running within the same web client.
+	// See: https://docs.cometd.org/current7/reference/#_bayeux_multiple_clients_advice
 	MultipleClients bool `json:"multiple-clients,omitempty"`
 
-	// Hosts https://docs.cometd.org/current7/reference/#_hosts_advice_field
+	// Hosts when present, indicates a list of host names or IP addresses that MAY be used as alternate servers with which the client may connect.
+	// See: https://docs.cometd.org/current7/reference/#_hosts_advice_field
 	Hosts []string `json:"hosts,omitempty"`
 }

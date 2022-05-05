@@ -17,10 +17,21 @@ package responses
 // DisconnectResponse represents disconnection response.
 // See: https://docs.cometd.org/current7/reference/#_disconnect_response
 type DisconnectResponse struct {
-	Channel    string `json:"channel"`
-	Successful bool   `json:"successful"`
-	ClientID   string `json:"clientId,omitempty"`
-	Error      string `json:"error,omitempty"`
-	Ext        *ext   `json:"ext,omitempty"`
-	ID         string `json:"id,omitempty"`
+	// Channel value MUST be `/meta/disconnect`
+	Channel string `json:"channel"`
+
+	// Successful is a boolean indicating the success or failure of the disconnect request
+	Successful bool `json:"successful"`
+
+	// ClientID is the client ID returned in the handshake response
+	ClientID string `json:"clientId,omitempty"`
+
+	// Error is a description of the reason for the failure
+	Error string `json:"error,omitempty"`
+
+	// Ext is the `ext` object
+	Ext *ext `json:"ext,omitempty"`
+
+	// ID is the same value as request message id
+	ID string `json:"id,omitempty"`
 }
