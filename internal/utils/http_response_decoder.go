@@ -23,8 +23,6 @@ import (
 
 // DecodeHTTPResponse reads response body and optionally un-compresses it.
 func DecodeHTTPResponse(response *http.Response) ([]byte, error) {
-	defer response.Body.Close()
-
 	var reader io.ReadCloser
 
 	// Detect compression method
