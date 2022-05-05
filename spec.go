@@ -65,8 +65,8 @@ func Specification() sdk.Specification {
 			},
 			"keyField": {
 				Default:     "id",
-				Required:    true,
-				Description: "The name of the data Key field.",
+				Required:    false,
+				Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
 			},
 		},
 	}

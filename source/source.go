@@ -97,9 +97,9 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	}
 
 	// Start events worker
-	go func() {
+	go func(ctx context.Context) {
 		s.eventsWorker(ctx)
-	}()
+	}(ctx)
 
 	return nil
 }
@@ -116,14 +116,16 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			return sdk.Record{}, err
 		}
 
+		replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
+
 		return sdk.Record{
 			Key:       keyValue,
 			Payload:   sdk.StructuredData(event.Data.Sobject),
-			Position:  sdk.Position(keyValue),
+			Position:  sdk.Position(replayID),
 			CreatedAt: event.Data.Event.CreatedDate,
 			Metadata: map[string]string{
 				"channel":  event.Channel,
-				"replayId": strconv.FormatInt(int64(event.Data.Event.ReplayID), 10),
+				"replayId": replayID,
 				"action":   event.Data.Event.Type,
 			},
 		}, nil
@@ -227,6 +229,10 @@ func (s *Source) eventsWorker(ctx context.Context) {
 }
 
 func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData, error) {
+	if s.config.KeyField == "" {
+		return nil, nil
+	}
+
 	value, exists := event.Data.Sobject[s.config.KeyField]
 	if !exists {
 		return nil, fmt.Errorf("the %q field does not exist in the data", s.config.KeyField)
