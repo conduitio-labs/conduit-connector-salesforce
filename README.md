@@ -17,14 +17,14 @@ The Source connector subscribed to given topic and listens for events published 
 
 | name            | description                                                                                                                                                   | required | default |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
-| `environment`   | Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment. | true     |         |
-| `clientId`      | OAuth Client ID (Consumer Key).                                                                                                                               | true     |         |
-| `clientSecret`  | OAuth Client Secret (Consumer Secret).                                                                                                                        | true     |         |
-| `username`      | Username.                                                                                                                                                     | true     |         |
-| `password`      | Password.                                                                                                                                                     | true     |         |
-| `securityToken` | Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.                                             | false    |         |
-| `pushTopicName` | The name of the Push Topic to listen to. This value will be prefixed with `/topic/`.                                                                          | true     |         |
-| `keyField`      | The name of the Response's field that should be used as a Payload's Key. Empty value will set it to `nil`.                                                    | false    | Id      |
+| `environment`   | Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment. | `true`   |         |
+| `clientId`      | OAuth Client ID (Consumer Key).                                                                                                                               | `true`   |         |
+| `clientSecret`  | OAuth Client Secret (Consumer Secret).                                                                                                                        | `true`   |         |
+| `username`      | Username.                                                                                                                                                     | `true`   |         |
+| `password`      | Password.                                                                                                                                                     | `true`   |         |
+| `securityToken` | Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.                                             | `false`  |         |
+| `pushTopicName` | The name of the Push Topic to listen to. This value will be prefixed with `/topic/`.                                                                          | `true`   |         |
+| `keyField`      | The name of the Response's field that should be used as a Payload's Key. Empty value will set it to `nil`.                                                    | `false`  | `Id`    |
 
 ## Destination
 
