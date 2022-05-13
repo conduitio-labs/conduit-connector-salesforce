@@ -16,40 +16,41 @@ package source
 
 import (
 	"fmt"
+	"strings"
 )
 
 const (
-	ConfigKeyEnvironment   = "environment"
-	ConfigKeyClientID      = "clientId"
-	ConfigKeyClientSecret  = "clientSecret"
-	ConfigKeyUsername      = "username"
-	ConfigKeyPassword      = "password"
-	ConfigKeySecurityToken = "securityToken"
-	ConfigKeyPushTopicName = "pushTopicName"
-	ConfigKeyKeyField      = "keyField"
+	ConfigKeyEnvironment     = "environment"
+	ConfigKeyClientID        = "clientId"
+	ConfigKeyClientSecret    = "clientSecret"
+	ConfigKeyUsername        = "username"
+	ConfigKeyPassword        = "password"
+	ConfigKeySecurityToken   = "securityToken"
+	ConfigKeyPushTopicsNames = "pushTopicsNames"
+	ConfigKeyKeyField        = "keyField"
 )
 
 type Config struct {
-	Environment   string
-	ClientID      string
-	ClientSecret  string
-	Username      string
-	Password      string
-	SecurityToken string
-	PushTopicName string
-	KeyField      string
+	Environment     string
+	ClientID        string
+	ClientSecret    string
+	Username        string
+	Password        string
+	SecurityToken   string
+	PushTopicsNames []string
+	KeyField        string
 }
 
 func ParseConfig(cfgRaw map[string]string) (Config, error) {
 	cfg := Config{
-		Environment:   cfgRaw[ConfigKeyEnvironment],
-		ClientID:      cfgRaw[ConfigKeyClientID],
-		ClientSecret:  cfgRaw[ConfigKeyClientSecret],
-		Username:      cfgRaw[ConfigKeyUsername],
-		Password:      cfgRaw[ConfigKeyPassword],
-		SecurityToken: cfgRaw[ConfigKeySecurityToken],
-		PushTopicName: cfgRaw[ConfigKeyPushTopicName],
-		KeyField:      cfgRaw[ConfigKeyKeyField],
+		Environment:     cfgRaw[ConfigKeyEnvironment],
+		ClientID:        cfgRaw[ConfigKeyClientID],
+		ClientSecret:    cfgRaw[ConfigKeyClientSecret],
+		Username:        cfgRaw[ConfigKeyUsername],
+		Password:        cfgRaw[ConfigKeyPassword],
+		SecurityToken:   cfgRaw[ConfigKeySecurityToken],
+		PushTopicsNames: make([]string, 0),
+		KeyField:        cfgRaw[ConfigKeyKeyField],
 	}
 	if cfg.Environment == "" {
 		return Config{}, requiredConfigErr(ConfigKeyEnvironment)
@@ -66,8 +67,26 @@ func ParseConfig(cfgRaw map[string]string) (Config, error) {
 	if cfg.Password == "" {
 		return Config{}, requiredConfigErr(ConfigKeyPassword)
 	}
-	if cfg.PushTopicName == "" {
-		return Config{}, requiredConfigErr(ConfigKeyPushTopicName)
+
+	// Push Topics' Names
+	registeredTopics := make(map[string]bool)
+
+	for _, topicName := range strings.Split(cfgRaw[ConfigKeyPushTopicsNames], ",") {
+		topicNameClear := strings.TrimSpace(topicName)
+		if topicNameClear == "" {
+			continue
+		}
+
+		if _, exists := registeredTopics[topicNameClear]; exists {
+			continue
+		}
+
+		cfg.PushTopicsNames = append(cfg.PushTopicsNames, topicNameClear)
+		registeredTopics[topicNameClear] = true
+	}
+
+	if len(cfg.PushTopicsNames) == 0 {
+		return Config{}, requiredConfigErr(ConfigKeyPushTopicsNames)
 	}
 
 	return cfg, nil

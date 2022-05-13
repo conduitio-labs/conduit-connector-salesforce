@@ -16,6 +16,7 @@ package salesforce
 
 import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/miquido/conduit-connector-salesforce/source"
 )
 
 func Specification() sdk.Specification {
@@ -28,42 +29,42 @@ func Specification() sdk.Specification {
 			//
 		},
 		SourceParams: map[string]sdk.Parameter{
-			"environment": {
+			source.ConfigKeyEnvironment: {
 				Default:     "",
 				Required:    true,
 				Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
 			},
-			"clientId": {
+			source.ConfigKeyClientID: {
 				Default:     "",
 				Required:    true,
 				Description: "OAuth Client ID (Consumer Key).",
 			},
-			"clientSecret": {
+			source.ConfigKeyClientSecret: {
 				Default:     "",
 				Required:    true,
 				Description: "OAuth Client Secret (Consumer Secret).",
 			},
-			"username": {
+			source.ConfigKeyUsername: {
 				Default:     "",
 				Required:    true,
 				Description: "Username.",
 			},
-			"password": {
+			source.ConfigKeyPassword: {
 				Default:     "",
 				Required:    true,
 				Description: "Password.",
 			},
-			"securityToken": {
+			source.ConfigKeySecurityToken: {
 				Default:     "",
 				Required:    false,
 				Description: "Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.",
 			},
-			"pushTopicName": {
+			source.ConfigKeyPushTopicsNames: {
 				Default:     "",
 				Required:    true,
 				Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
 			},
-			"keyField": {
+			source.ConfigKeyKeyField: {
 				Default:     "Id",
 				Required:    false,
 				Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",

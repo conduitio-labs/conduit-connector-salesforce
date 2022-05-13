@@ -83,17 +83,19 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	}
 
 	// Subscribe to topic
-	subscribeResponse, err := s.streamingClient.SubscribeToPushTopic(ctx, s.config.PushTopicName)
-	if err != nil {
-		return fmt.Errorf("subscribe error: %w", err)
-	}
-	if !subscribeResponse.Successful {
-		return fmt.Errorf("subscribe error: %s", subscribeResponse.Error)
-	}
+	for _, pushTopicName := range s.config.PushTopicsNames {
+		subscribeResponse, err := s.streamingClient.SubscribeToPushTopic(ctx, pushTopicName)
+		if err != nil {
+			return fmt.Errorf("subscribe error: failed to subscribe %q topic: %w", pushTopicName, err)
+		}
+		if !subscribeResponse.Successful {
+			return fmt.Errorf("subscribe error: failed to subscribe %q topic: %s", pushTopicName, subscribeResponse.Error)
+		}
 
-	// Register subscriptions that we should listen to
-	for _, sub := range subscribeResponse.GetSubscriptions() {
-		s.subscriptions[sub] = true
+		// Register subscriptions that we should listen to
+		for _, sub := range subscribeResponse.GetSubscriptions() {
+			s.subscriptions[sub] = true
+		}
 	}
 
 	// Start events worker
@@ -144,11 +146,13 @@ func (s *Source) Ack(_ context.Context, _ sdk.Position) error {
 
 func (s *Source) Teardown(ctx context.Context) error {
 	// Unsubscribe
-	unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, s.config.PushTopicName)
-	if err != nil {
-		sdk.Logger(ctx).Warn().Msgf("unsubscribe error: %s", err)
-	} else if !unsubscribeResponse.Successful {
-		sdk.Logger(ctx).Warn().Msgf("unsubscribe error: %s", unsubscribeResponse.Error)
+	for _, pushTopicName := range s.config.PushTopicsNames {
+		unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, pushTopicName)
+		if err != nil {
+			sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, err)
+		} else if !unsubscribeResponse.Successful {
+			sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, unsubscribeResponse.Error)
+		}
 	}
 
 	// Disconnect
