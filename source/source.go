@@ -48,8 +48,11 @@ func NewSource() sdk.Source {
 
 func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err error) {
 	s.config, err = ParseConfig(cfgRaw)
+	if err != nil {
+		return fmt.Errorf("configuration error: %w", err)
+	}
 
-	return
+	return nil
 }
 
 func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
@@ -65,7 +68,7 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 
 	token, err := oAuthClient.Authenticate(ctx)
 	if err != nil {
-		return fmt.Errorf("could not authenticate: %w", err)
+		return fmt.Errorf("connector open error: could not authenticate: %w", err)
 	}
 
 	// Streaming API client
@@ -74,22 +77,22 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 		token.AccessToken,
 	)
 	if err != nil {
-		return fmt.Errorf("could not create Streaming API client: %w", err)
+		return fmt.Errorf("connector open error: could not create Streaming API client: %w", err)
 	}
 
 	// Handshake
 	if _, err := s.streamingClient.Handshake(ctx); err != nil {
-		return fmt.Errorf("handshake error: %w", err)
+		return fmt.Errorf("connector open error: handshake error: %w", err)
 	}
 
 	// Subscribe to topic
 	for _, pushTopicName := range s.config.PushTopicsNames {
 		subscribeResponse, err := s.streamingClient.SubscribeToPushTopic(ctx, pushTopicName)
 		if err != nil {
-			return fmt.Errorf("subscribe error: failed to subscribe %q topic: %w", pushTopicName, err)
+			return fmt.Errorf("connector open error: subscribe error: failed to subscribe %q topic: %w", pushTopicName, err)
 		}
 		if !subscribeResponse.Successful {
-			return fmt.Errorf("subscribe error: failed to subscribe %q topic: %s", pushTopicName, subscribeResponse.Error)
+			return fmt.Errorf("connector open error: subscribe error: failed to subscribe %q topic: %s", pushTopicName, subscribeResponse.Error)
 		}
 
 		// Register subscriptions that we should listen to
@@ -158,10 +161,10 @@ func (s *Source) Teardown(ctx context.Context) error {
 	// Disconnect
 	disconnectResponse, err := s.streamingClient.Disconnect(ctx)
 	if err != nil {
-		return fmt.Errorf("disconnect error: %w", err)
+		return fmt.Errorf("connector close error: disconnect error: %w", err)
 	}
 	if !disconnectResponse.Successful {
-		return fmt.Errorf("disconnect error: %s", disconnectResponse.Error)
+		return fmt.Errorf("connector close error: disconnect error: %s", disconnectResponse.Error)
 	}
 
 	s.subscriptions = nil
