@@ -45,6 +45,7 @@ func NewClient(
 	securityToken string,
 ) *Client {
 	return &Client{
+		httpClient:    http.DefaultClient,
 		environment:   environment,
 		clientID:      clientID,
 		clientSecret:  clientSecret,
@@ -55,12 +56,18 @@ func NewClient(
 }
 
 type Client struct {
+	httpClient    httpClient
 	environment   Environment
 	clientID      string
 	clientSecret  string
 	username      string
 	password      string
 	securityToken string
+}
+
+//go:generate moq -out http_client_moq_test.go . httpClient
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 // Authenticate attempts to authenticate the client with given credentials
@@ -96,7 +103,7 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 	req.Header.Set("User-Agent", "ConduitIO/Salesforce-v0.1.0")
 
 	// Execute Request
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := a.httpClient.Do(req)
 	if err != nil {
 		return response.TokenResponse{}, fmt.Errorf("failed to send authentication request: %w", err)
 	}
@@ -111,7 +118,7 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 
 	// Attempt to parse successful response
 	var token response.TokenResponse
-	if err := json.Unmarshal(respBytes, &token); err == nil {
+	if err := json.Unmarshal(respBytes, &token); err == nil && token.AccessToken != "" && token.InstanceURL != "" {
 		return token, nil
 	}
 
