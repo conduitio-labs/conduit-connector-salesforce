@@ -11,7 +11,7 @@ Run `make`.
 
 ## Source
 
-The Source connector subscribed to given topic and listens for events published by Salesforce.
+The Source connector subscribes to given list of topics and listens for events published by Salesforce.
 
 ### How it works
 
