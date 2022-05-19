@@ -28,10 +28,14 @@ The connector authenticates with Salesforce using OAuth credentials. Once succes
 Salesforce uses [CometD](https://docs.cometd.org/current7/reference/#_preface) as a streaming protocol. More details can be found in link below and in References:
 https://developer.salesforce.com/docs/atlas.en-us.api_streaming.meta/api_streaming/using_streaming_api_client_connection.htm
 
-#### Push Topics
+#### Push Topic events
 
 Connector is capable of listening to [custom Push Topics](https://developer.salesforce.com/docs/atlas.en-us.api_streaming.meta/api_streaming/code_sample_interactive_vfp_create_pushtopic.htm).
 All types of notifications are supported: `NotifyForOperationCreate`, `NotifyForOperationUpdate`, `NotifyForOperationUndelete`, `NotifyForOperationDelete`.
+
+#### Change Data Capture events
+
+Currently, connector does not support [Change Data Capture](https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_subscribe_channels.htm) events.
 
 #### Data types
 
