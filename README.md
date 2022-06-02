@@ -100,10 +100,6 @@ There are a couple of steps that need to be done to start working with Salesforc
 
         Later, this may be utilized by other connectors, e.g. [Elasticsearch connector](https://github.com/miquido/conduit-connector-elasticsearch) will create Document with ID of Record's Key when available.
 
-## Destination
-
-Not supported.
-
 ## Testing
 
 Run `make test` to run all the unit and integration tests.
