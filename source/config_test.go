@@ -25,82 +25,88 @@ import (
 func TestParseConfig(t *testing.T) {
 	fakerInstance := faker.New()
 
-	t.Run("fails when Environment is empty", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			"nonExistentKey": "value",
+	for _, tt := range []struct {
+		name  string
+		error string
+		cfg   map[string]string
+	}{
+		{
+			name:  "Environment is empty",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyEnvironment),
+			cfg: map[string]string{
+				"nonExistentKey": "value",
+			},
+		},
+		{
+			name:  "Client ID is empty",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyClientID),
+			cfg: map[string]string{
+				ConfigKeyEnvironment: fakerInstance.Lorem().Word(),
+				"nonExistentKey":     "value",
+			},
+		},
+		{
+			name:  "Client Secret is empty",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyClientSecret),
+			cfg: map[string]string{
+				ConfigKeyEnvironment: fakerInstance.Lorem().Word(),
+				ConfigKeyClientID:    fakerInstance.RandomStringWithLength(32),
+				"nonExistentKey":     "value",
+			},
+		},
+		{
+			name:  "Username is empty",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyUsername),
+			cfg: map[string]string{
+				ConfigKeyEnvironment:  fakerInstance.Lorem().Word(),
+				ConfigKeyClientID:     fakerInstance.RandomStringWithLength(32),
+				ConfigKeyClientSecret: fakerInstance.RandomStringWithLength(32),
+				"nonExistentKey":      "value",
+			},
+		},
+		{
+			name:  "Password is empty",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyPassword),
+			cfg: map[string]string{
+				ConfigKeyEnvironment:  fakerInstance.Lorem().Word(),
+				ConfigKeyClientID:     fakerInstance.RandomStringWithLength(32),
+				ConfigKeyClientSecret: fakerInstance.RandomStringWithLength(32),
+				ConfigKeyUsername:     fakerInstance.Lorem().Sentence(6),
+				"nonExistentKey":      "value",
+			},
+		},
+		{
+			name:  "Push Topics' Names is empty",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyPushTopicsNames),
+			cfg: map[string]string{
+				ConfigKeyEnvironment:  fakerInstance.Lorem().Word(),
+				ConfigKeyClientID:     fakerInstance.RandomStringWithLength(32),
+				ConfigKeyClientSecret: fakerInstance.RandomStringWithLength(32),
+				ConfigKeyUsername:     fakerInstance.Lorem().Sentence(6),
+				ConfigKeyPassword:     fakerInstance.Lorem().Sentence(6),
+				"nonExistentKey":      "value",
+			},
+		},
+		{
+			name:  "Push Topics' Names contains list of empty names",
+			error: fmt.Sprintf("%q config value must be set", ConfigKeyPushTopicsNames),
+			cfg: map[string]string{
+				ConfigKeyEnvironment:     fakerInstance.Lorem().Word(),
+				ConfigKeyClientID:        fakerInstance.RandomStringWithLength(32),
+				ConfigKeyClientSecret:    fakerInstance.RandomStringWithLength(32),
+				ConfigKeyUsername:        fakerInstance.Lorem().Sentence(6),
+				ConfigKeyPassword:        fakerInstance.Lorem().Sentence(6),
+				ConfigKeyPushTopicsNames: ",",
+				"nonExistentKey":         "value",
+			},
+		},
+	} {
+		t.Run(fmt.Sprintf("fails when: %s", tt.name), func(t *testing.T) {
+			_, err := ParseConfig(tt.cfg)
+
+			require.EqualError(t, err, tt.error)
 		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyEnvironment))
-	})
-
-	t.Run("fails when Client ID is empty", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			ConfigKeyEnvironment: fakerInstance.Lorem().Word(),
-			"nonExistentKey":     "value",
-		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyClientID))
-	})
-
-	t.Run("fails when Client Secret is empty", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			ConfigKeyEnvironment: fakerInstance.Lorem().Word(),
-			ConfigKeyClientID:    fakerInstance.RandomStringWithLength(32),
-			"nonExistentKey":     "value",
-		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyClientSecret))
-	})
-
-	t.Run("fails when Username is empty", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			ConfigKeyEnvironment:  fakerInstance.Lorem().Word(),
-			ConfigKeyClientID:     fakerInstance.RandomStringWithLength(32),
-			ConfigKeyClientSecret: fakerInstance.RandomStringWithLength(32),
-			"nonExistentKey":      "value",
-		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyUsername))
-	})
-
-	t.Run("fails when Password is empty", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			ConfigKeyEnvironment:  fakerInstance.Lorem().Word(),
-			ConfigKeyClientID:     fakerInstance.RandomStringWithLength(32),
-			ConfigKeyClientSecret: fakerInstance.RandomStringWithLength(32),
-			ConfigKeyUsername:     fakerInstance.Lorem().Sentence(6),
-			"nonExistentKey":      "value",
-		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyPassword))
-	})
-
-	t.Run("fails when Push Topics' Names is empty", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			ConfigKeyEnvironment:  fakerInstance.Lorem().Word(),
-			ConfigKeyClientID:     fakerInstance.RandomStringWithLength(32),
-			ConfigKeyClientSecret: fakerInstance.RandomStringWithLength(32),
-			ConfigKeyUsername:     fakerInstance.Lorem().Sentence(6),
-			ConfigKeyPassword:     fakerInstance.Lorem().Sentence(6),
-			"nonExistentKey":      "value",
-		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyPushTopicsNames))
-	})
-
-	t.Run("fails when Push Topics' Names contains list of empty names", func(t *testing.T) {
-		_, err := ParseConfig(map[string]string{
-			ConfigKeyEnvironment:     fakerInstance.Lorem().Word(),
-			ConfigKeyClientID:        fakerInstance.RandomStringWithLength(32),
-			ConfigKeyClientSecret:    fakerInstance.RandomStringWithLength(32),
-			ConfigKeyUsername:        fakerInstance.Lorem().Sentence(6),
-			ConfigKeyPassword:        fakerInstance.Lorem().Sentence(6),
-			ConfigKeyPushTopicsNames: ",",
-			"nonExistentKey":         "value",
-		})
-
-		require.EqualError(t, err, fmt.Sprintf("%q config value must be set", ConfigKeyPushTopicsNames))
-	})
+	}
 
 	t.Run("returns config when all required config values were provided", func(t *testing.T) {
 		cfgRaw := map[string]string{
