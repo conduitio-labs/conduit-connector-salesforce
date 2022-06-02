@@ -69,7 +69,7 @@ There may be need to reconnect while connector is working. Server returns condit
 | `password`        | Password.                                                                                                                                                                                                                                      | `true`   |         |
 | `securityToken`   | Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.                                                                                                                              | `false`  |         |
 | `pushTopicsNames` | The comma-separated list of names of the Push Topics to listen to. All values will be prefixed with `/topic/`. All values will have white spaces trimmed. Any empty value is skipped. All Topics have to exist for connector to start working. | `true`   |         |
-| `keyField`        | The name of the Response's field that should be used as a Payload's Key. Empty value will set it to `nil`.                                                                                                                                     | `false`  | `Id`    |
+| `keyField`        | The name of the Response's field that should be used as a Payload's Key. Empty value will set it to `nil`.                                                                                                                                     | `false`  | `"Id"`  |
 
 ### Step-by-step configuration example
 
