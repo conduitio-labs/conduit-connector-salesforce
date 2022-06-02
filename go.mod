@@ -5,8 +5,10 @@ go 1.18
 require (
 	github.com/conduitio/conduit-connector-sdk v0.2.0
 	github.com/jaswdr/faker v1.10.2
-	github.com/stretchr/testify v1.7.0
-	golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
+	github.com/sigmavirus24/gobayeux v1.0.0
+	github.com/sirupsen/logrus v1.8.1
+	github.com/stretchr/testify v1.7.1
+	golang.org/x/net v0.0.0-20220531201128-c960675eff93
 )
 
 require (
@@ -26,11 +28,11 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/zerolog v1.26.1 // indirect
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1 // indirect
-	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6 // indirect
+	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
 	golang.org/x/text v0.3.7 // indirect
-	google.golang.org/genproto v0.0.0-20220504150022-98cd25cafc72 // indirect
-	google.golang.org/grpc v1.46.0 // indirect
+	google.golang.org/genproto v0.0.0-20220601144221-27df5f98adab // indirect
+	google.golang.org/grpc v1.47.0 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
