@@ -101,14 +101,14 @@ func TestParseConfig(t *testing.T) {
 			},
 		},
 	} {
-		t.Run(fmt.Sprintf("fails when: %s", tt.name), func(t *testing.T) {
+		t.Run(fmt.Sprintf("Fails when: %s", tt.name), func(t *testing.T) {
 			_, err := ParseConfig(tt.cfg)
 
 			require.EqualError(t, err, tt.error)
 		})
 	}
 
-	t.Run("returns config when all required config values were provided", func(t *testing.T) {
+	t.Run("Returns config when all required config values were provided", func(t *testing.T) {
 		cfgRaw := map[string]string{
 			ConfigKeyEnvironment:     fakerInstance.Lorem().Word(),
 			ConfigKeyClientID:        fakerInstance.RandomStringWithLength(32),
@@ -133,7 +133,7 @@ func TestParseConfig(t *testing.T) {
 		require.Empty(t, "", config.KeyField)
 	})
 
-	t.Run("returns config with Push Topic's Names' duplicates removed", func(t *testing.T) {
+	t.Run("Returns config with Push Topic's Names' duplicates removed", func(t *testing.T) {
 		cfgRaw := map[string]string{
 			ConfigKeyEnvironment:     fakerInstance.Lorem().Word(),
 			ConfigKeyClientID:        fakerInstance.RandomStringWithLength(32),
@@ -150,7 +150,7 @@ func TestParseConfig(t *testing.T) {
 		require.ElementsMatch(t, config.PushTopicsNames, []string{"Foo", "Bar", "Baz"})
 	})
 
-	t.Run("returns config when all config values were provided", func(t *testing.T) {
+	t.Run("Returns config when all config values were provided", func(t *testing.T) {
 		cfgRaw := map[string]string{
 			ConfigKeyEnvironment:     fakerInstance.Lorem().Word(),
 			ConfigKeyClientID:        fakerInstance.RandomStringWithLength(32),
