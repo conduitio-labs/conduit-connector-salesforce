@@ -249,7 +249,9 @@ func (s *Client) httpPost(ctx context.Context, payload requests.Request) ([]byte
 		return nil, fmt.Errorf("could not read response data: %w", err)
 	}
 
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		return nil, fmt.Errorf("could not read response data: %w", err)
+	}
 
 	return respBytes, nil
 }

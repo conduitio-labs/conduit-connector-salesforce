@@ -218,6 +218,57 @@ func TestClient_Authenticate(t *testing.T) {
 		require.Len(t, hcMock.DoCalls(), 1)
 	})
 
+	t.Run("Returns error when request body could not be parsed as FailureResponseError 2", func(t *testing.T) {
+		var (
+			environment      = fakerInstance.Lorem().Word()
+			clientID         = fakerInstance.RandomStringWithLength(32)
+			clientSecret     = fakerInstance.RandomStringWithLength(32)
+			username         = fakerInstance.Lorem().Sentence(6)
+			password         = fakerInstance.Lorem().Sentence(6)
+			securityToken    = fakerInstance.RandomStringWithLength(32)
+			closeErrorReason = fakerInstance.Lorem().Sentence(6)
+		)
+
+		hcMock := httpClientMock{
+			DoFunc: func(req *http.Request) (*http.Response, error) {
+				require.Equal(t, loginURI, req.URL.String())
+
+				body, err := req.GetBody()
+				require.NoError(t, err)
+
+				allBody, err := io.ReadAll(body)
+				require.NoError(t, err)
+
+				parsedQuery, err := url.ParseQuery(string(allBody))
+				require.NoError(t, err)
+				require.Equal(t, grantType, parsedQuery["grant_type"][0])
+				require.Equal(t, clientID, parsedQuery["client_id"][0])
+				require.Equal(t, clientSecret, parsedQuery["client_secret"][0])
+				require.Equal(t, username, parsedQuery["username"][0])
+				require.Equal(t, fmt.Sprintf("%s%s", password, securityToken), parsedQuery["password"][0])
+
+				return &http.Response{
+					Body: NewFailedReadCloserMock(strings.NewReader("nil"), errors.New(closeErrorReason)),
+				}, nil
+			},
+		}
+
+		client := Client{
+			httpClient:    &hcMock,
+			environment:   environment,
+			clientID:      clientID,
+			clientSecret:  clientSecret,
+			username:      username,
+			password:      password,
+			securityToken: securityToken,
+		}
+
+		_, err := client.Authenticate(context.TODO())
+		require.EqualError(t, err, fmt.Sprintf("could not read response data: %s", closeErrorReason))
+
+		require.Len(t, hcMock.DoCalls(), 1)
+	})
+
 	t.Run("Returns FailureResponseError when request body could be parsed", func(t *testing.T) {
 		var (
 			environment   = fakerInstance.Lorem().Word()

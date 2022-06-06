@@ -114,7 +114,9 @@ func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, erro
 		return response.TokenResponse{}, fmt.Errorf("could not read response data: %w", err)
 	}
 
-	resp.Body.Close()
+	if err := resp.Body.Close(); err != nil {
+		return response.TokenResponse{}, fmt.Errorf("could not read response data: %w", err)
+	}
 
 	// Attempt to parse successful response
 	var token response.TokenResponse
