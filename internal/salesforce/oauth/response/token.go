@@ -22,11 +22,3 @@ type TokenResponse struct {
 	IssuedAt    string `json:"issued_at"`
 	Signature   string `json:"signature"`
 }
-
-func (t TokenResponse) GetAccessToken() string {
-	return t.AccessToken
-}
-
-func (t TokenResponse) GetInstanceURL() string {
-	return t.InstanceURL
-}
