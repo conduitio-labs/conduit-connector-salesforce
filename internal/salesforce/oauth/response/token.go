@@ -15,10 +15,16 @@
 package response
 
 // TokenResponse represents successful OAuth server response.
+// See: https://developer.salesforce.com/docs/atlas.en-us.api_iot.meta/api_iot/qs_auth_access_token.htm
 type TokenResponse struct {
+	// [required] AccessToken contains the access token value. API clients pass the access token in the Authorization
+	// header of each request.
 	AccessToken string `json:"access_token"`
+
+	// [required] InstanceURL contains the Salesforce instance URL for API calls.
 	InstanceURL string `json:"instance_url"`
-	ID          string `json:"id"`
-	IssuedAt    string `json:"issued_at"`
-	Signature   string `json:"signature"`
+
+	ID        string `json:"id,omitempty"`
+	IssuedAt  string `json:"issued_at,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
