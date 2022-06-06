@@ -125,7 +125,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
 		return sdk.Record{
 			Key:       keyValue,
-			Payload:   sdk.StructuredData(event.Data.Sobject),
+			Payload:   sdk.StructuredData(event.Data.SObject),
 			Position:  sdk.Position(replayID),
 			CreatedAt: event.Data.Event.CreatedDate,
 			Metadata: map[string]string{
@@ -251,7 +251,7 @@ func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData,
 		return nil, nil
 	}
 
-	value, exists := event.Data.Sobject[s.config.KeyField]
+	value, exists := event.Data.SObject[s.config.KeyField]
 	if !exists {
 		return nil, fmt.Errorf("the %q field does not exist in the data", s.config.KeyField)
 	}

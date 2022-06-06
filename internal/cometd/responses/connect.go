@@ -44,7 +44,7 @@ type ConnectResponse struct {
 	Events []ConnectResponseEvent
 }
 
-// ConnectResponseEvent represents single piece of data returend in connect response
+// ConnectResponseEvent represents single piece of data returned in connect response
 type ConnectResponseEvent struct {
 	Data struct {
 		Event struct {
@@ -52,7 +52,7 @@ type ConnectResponseEvent struct {
 			ReplayID    int       `json:"replayId"`
 			Type        string    `json:"type"`
 		} `json:"event"`
-		Sobject map[string]interface{} `json:"sobject"`
+		SObject map[string]interface{} `json:"sobject"`
 	} `json:"data"`
 	Channel string `json:"channel"`
 }

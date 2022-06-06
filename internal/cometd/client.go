@@ -163,7 +163,7 @@ func (s *Client) SubscribeToPushTopic(ctx context.Context, pushTopic string) (re
 	return successfulResponses[0], nil
 }
 
-// UnsubscribeToPushTopic performs a unsubscrive from topic request.
+// UnsubscribeToPushTopic performs a unsubscribe from topic request.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_meta_unsubscribe
 func (s *Client) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error) {
 	// Prepare and send request
