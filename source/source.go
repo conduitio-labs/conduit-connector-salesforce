@@ -21,6 +21,7 @@ import (
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/miquido/conduit-connector-salesforce/internal"
 	"github.com/miquido/conduit-connector-salesforce/internal/cometd"
 	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
 	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth"
@@ -123,6 +124,28 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
 		replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
 
+		var action internal.Operation
+
+		switch event.Data.Event.Type {
+		case responses.CreatedEventType:
+			action = internal.OperationInsert
+
+		case responses.UpdatedEventType, responses.UndeletedEventType:
+			action = internal.OperationUpdate
+
+		case responses.DeletedEventType:
+			action = internal.OperationDelete
+
+		default:
+			sdk.Logger(ctx).Info().Msgf(
+				"unknown event type: %q, falling back to %q",
+				event.Data.Event.Type,
+				internal.OperationInsert,
+			)
+
+			action = internal.OperationInsert
+		}
+
 		return sdk.Record{
 			Key:       keyValue,
 			Payload:   sdk.StructuredData(event.Data.SObject),
@@ -131,7 +154,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			Metadata: map[string]string{
 				"channel":  event.Channel,
 				"replayId": replayID,
-				"action":   event.Data.Event.Type,
+				"action":   action,
 			},
 		}, nil
 

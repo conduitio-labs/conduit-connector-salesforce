@@ -44,13 +44,25 @@ type ConnectResponse struct {
 	Events []ConnectResponseEvent
 }
 
+type ConnectResponseEventType = string
+
+const (
+	CreatedEventType   = "created"
+	UpdatedEventType   = "updated"
+	DeletedEventType   = "deleted"
+	UndeletedEventType = "undeleted"
+)
+
 // ConnectResponseEvent represents single piece of data returned in connect response
 type ConnectResponseEvent struct {
 	Data struct {
 		Event struct {
 			CreatedDate time.Time `json:"createdDate"`
 			ReplayID    int       `json:"replayId"`
-			Type        string    `json:"type"`
+
+			// Type denotes creation, update, delete, or undelete of a record
+			// See: https://developer.salesforce.com/docs/atlas.en-us.236.0.api_streaming.meta/api_streaming/terms.htm
+			Type ConnectResponseEventType `json:"type"`
 		} `json:"event"`
 		SObject map[string]interface{} `json:"sobject"`
 	} `json:"data"`
