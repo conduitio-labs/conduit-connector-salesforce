@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"sync"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
@@ -24,10 +25,13 @@ import (
 type streamingClientMock struct {
 	results   []sdk.Record
 	lastIndex int
+	mutex     sync.Mutex
 }
 
 func (s *streamingClientMock) SetResults(results []sdk.Record) {
+	s.mutex.Lock()
 	s.results = results
+	s.mutex.Unlock()
 }
 
 func (s *streamingClientMock) Handshake(_ context.Context) (responses.SuccessfulHandshakeResponse, error) {
@@ -38,6 +42,8 @@ func (s *streamingClientMock) Handshake(_ context.Context) (responses.Successful
 }
 
 func (s *streamingClientMock) Connect(_ context.Context) (responses.ConnectResponse, error) {
+	s.mutex.Lock()
+
 	response := responses.ConnectResponse{
 		Successful: true,
 		Events:     make([]responses.ConnectResponseEvent, 0, len(s.results)),
@@ -59,6 +65,8 @@ func (s *streamingClientMock) Connect(_ context.Context) (responses.ConnectRespo
 	}
 
 	s.results = nil
+
+	s.mutex.Unlock()
 
 	// Make Connect always successful
 	return response, nil
