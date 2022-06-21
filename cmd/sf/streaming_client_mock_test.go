@@ -1,0 +1,73 @@
+package main
+
+import (
+	"context"
+
+	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
+)
+
+type streamingClientMock struct {
+	results   []sdk.Record
+	lastIndex int
+}
+
+func (s *streamingClientMock) SetResults(results []sdk.Record) {
+	s.results = results
+}
+
+func (s *streamingClientMock) Handshake(_ context.Context) (responses.SuccessfulHandshakeResponse, error) {
+	// Make Handshake always successful
+	return responses.SuccessfulHandshakeResponse{
+		Successful: true,
+	}, nil
+}
+
+func (s *streamingClientMock) Connect(_ context.Context) (responses.ConnectResponse, error) {
+	response := responses.ConnectResponse{
+		Successful: true,
+		Events:     make([]responses.ConnectResponseEvent, 0, len(s.results)),
+	}
+
+	for _, record := range s.results {
+		response.Events = append(response.Events, responses.ConnectResponseEvent{
+			Data: responses.ConnectResponseEventData{
+				Event: responses.ConnectResponseEventDataMetadata{
+					CreatedDate: record.CreatedAt,
+					ReplayID:    s.lastIndex,
+				},
+				SObject: record.Payload.(sdk.StructuredData),
+			},
+			Channel: "MyTopic1",
+		})
+
+		s.lastIndex++
+	}
+
+	s.results = nil
+
+	// Make Connect always successful
+	return response, nil
+}
+
+func (s *streamingClientMock) SubscribeToPushTopic(_ context.Context, pushTopic string) (responses.SubscribeResponse, error) {
+	// Make SubscribeToPushTopic always successful
+	return responses.SubscribeResponse{
+		Successful:   true,
+		Subscription: []string{pushTopic},
+	}, nil
+}
+
+func (s *streamingClientMock) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error) {
+	// Make UnsubscribeToPushTopic always successful
+	return responses.UnsubscribeResponse{
+		Successful: true,
+	}, nil
+}
+
+func (s *streamingClientMock) Disconnect(ctx context.Context) (responses.DisconnectResponse, error) {
+	// Make Disconnect always successful
+	return responses.DisconnectResponse{
+		Successful: true,
+	}, nil
+}

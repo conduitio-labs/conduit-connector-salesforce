@@ -36,15 +36,20 @@ const (
 	testLoginURI = "https://test.salesforce.com/services/oauth2/token"
 )
 
-func NewClient(
+//go:generate moq -out client_moq_test.go . Client
+type Client interface {
+	Authenticate(ctx context.Context) (response.TokenResponse, error)
+}
+
+func NewDefaultClient(
 	environment Environment,
 	clientID string,
 	clientSecret string,
 	username string,
 	password string,
 	securityToken string,
-) *Client {
-	return &Client{
+) Client {
+	return &DefaultClient{
 		httpClient:    http.DefaultClient,
 		environment:   environment,
 		clientID:      clientID,
@@ -55,7 +60,7 @@ func NewClient(
 	}
 }
 
-type Client struct {
+type DefaultClient struct {
 	httpClient    httpClient
 	environment   Environment
 	clientID      string
@@ -71,7 +76,7 @@ type httpClient interface {
 }
 
 // Authenticate attempts to authenticate the client with given credentials
-func (a *Client) Authenticate(ctx context.Context) (response.TokenResponse, error) {
+func (a *DefaultClient) Authenticate(ctx context.Context) (response.TokenResponse, error) {
 	// Prepare request payload
 	payload := url.Values{
 		"grant_type":    {grantType},

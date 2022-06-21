@@ -44,16 +44,16 @@ func TestNewClient(t *testing.T) {
 			securityToken = fakerInstance.RandomStringWithLength(32)
 		)
 
-		client := NewClient(
+		client := NewDefaultClient(
 			environment,
 			clientID,
 			clientSecret,
 			username,
 			password,
 			securityToken,
-		)
+		).(*DefaultClient)
 
-		require.IsType(t, &Client{}, client)
+		require.IsType(t, &DefaultClient{}, client)
 		require.Same(t, http.DefaultClient, client.httpClient)
 		require.Equal(t, environment, client.environment)
 		require.Equal(t, clientID, client.clientID)
@@ -99,7 +99,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,
@@ -152,7 +152,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,
@@ -202,7 +202,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,
@@ -253,7 +253,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,
@@ -310,7 +310,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,
@@ -370,7 +370,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,
@@ -431,7 +431,7 @@ func TestClient_Authenticate(t *testing.T) {
 			},
 		}
 
-		client := Client{
+		client := DefaultClient{
 			httpClient:    &hcMock,
 			environment:   environment,
 			clientID:      clientID,

@@ -16,6 +16,7 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -25,25 +26,31 @@ import (
 	"github.com/miquido/conduit-connector-salesforce/internal/cometd"
 	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
 	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth"
+	"gopkg.in/tomb.v2"
 )
 
 const sfCometDVersion = "54.0"
+
+var OAuthClientFactory = oauth.NewDefaultClient
+var StreamingClientFactory = cometd.NewDefaultClient
+
+var ErrConnectorIsStopped = errors.New("connector is stopped")
 
 type Source struct {
 	sdk.UnimplementedSource
 
 	config          Config
-	streamingClient *cometd.Client
+	streamingClient cometd.Client
 	subscriptions   map[string]bool
 	events          chan responses.ConnectResponseEvent
-	errors          chan error
+	tomb            *tomb.Tomb
 }
 
 func NewSource() sdk.Source {
 	return &Source{
 		subscriptions: make(map[string]bool),
 		events:        make(chan responses.ConnectResponseEvent),
-		errors:        make(chan error),
+		tomb:          nil,
 	}
 }
 
@@ -58,7 +65,7 @@ func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err err
 
 func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	// Authenticate
-	oAuthClient := oauth.NewClient(
+	oAuthClient := OAuthClientFactory(
 		s.config.Environment,
 		s.config.ClientID,
 		s.config.ClientSecret,
@@ -73,7 +80,7 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	}
 
 	// Streaming API client
-	s.streamingClient, err = cometd.NewClient(
+	s.streamingClient, err = StreamingClientFactory(
 		fmt.Sprintf("%s/cometd/%s", token.InstanceURL, sfCometDVersion),
 		token.AccessToken,
 	)
@@ -103,14 +110,17 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	}
 
 	// Start events worker
-	go func(ctx context.Context) {
-		s.eventsWorker(ctx)
-	}(ctx)
+	s.tomb = &tomb.Tomb{}
+	s.tomb.Go(s.eventsWorker)
 
 	return nil
 }
 
 func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
+	if s.tomb == nil {
+		return sdk.Record{}, ErrConnectorIsStopped
+	}
+
 	select {
 	case event, ok := <-s.events:
 		if !ok {
@@ -158,7 +168,12 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			},
 		}, nil
 
-	case err := <-s.errors:
+	case <-s.tomb.Dead():
+		err := s.tomb.Err()
+		if err == nil {
+			err = ErrConnectorIsStopped
+		}
+
 		return sdk.Record{}, err
 
 	case <-ctx.Done():
@@ -173,96 +188,117 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	// Unsubscribe
-	for _, pushTopicName := range s.config.PushTopicsNames {
-		unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, pushTopicName)
-		if err != nil {
-			sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, err)
-		} else if !unsubscribeResponse.Successful {
-			sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, unsubscribeResponse.Error)
+	var err error
+
+	if s.tomb != nil {
+		s.tomb.Kill(ErrConnectorIsStopped)
+
+		err = s.tomb.Wait()
+
+		// Worker was properly closed
+		if errors.Is(err, ErrConnectorIsStopped) {
+			err = nil
 		}
 	}
 
-	// Disconnect
-	disconnectResponse, err := s.streamingClient.Disconnect(ctx)
-	if err != nil {
-		return fmt.Errorf("connector close error: disconnect error: %w", err)
-	}
-	if !disconnectResponse.Successful {
-		return fmt.Errorf("connector close error: disconnect error: %s", disconnectResponse.Error)
+	if s.streamingClient != nil {
+		// Unsubscribe
+		for _, pushTopicName := range s.config.PushTopicsNames {
+			unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, pushTopicName)
+			if err != nil {
+				sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, err)
+			} else if !unsubscribeResponse.Successful {
+				sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, unsubscribeResponse.Error)
+			}
+		}
+
+		// Disconnect
+		disconnectResponse, err := s.streamingClient.Disconnect(ctx)
+		if err != nil {
+			return fmt.Errorf("connector close error: disconnect error: %w", err)
+		}
+		if !disconnectResponse.Successful {
+			return fmt.Errorf("connector close error: disconnect error: %s", disconnectResponse.Error)
+		}
+
+		// Close the streaming client
+		s.streamingClient = nil
 	}
 
+	// Remove registered subscriptions and free the memory
 	s.subscriptions = nil
-	s.streamingClient = nil
 
-	return nil
+	return err
 }
 
 // eventsWorker continuously queries for data updates from Salesforce
-func (s *Source) eventsWorker(ctx context.Context) {
+func (s *Source) eventsWorker() error {
 	defer close(s.events)
 
 	for {
-		// Receive event
-		connectResponse, err := s.streamingClient.Connect(ctx)
-		if err != nil {
-			s.errors <- fmt.Errorf("failed to receive event: %w", err)
+		select {
+		case <-s.tomb.Dying():
+			return s.tomb.Err()
 
-			return
-		}
+		default:
+			ctx := s.tomb.Context(context.Background())
 
-		// If not successful, check how to retry
-		if !connectResponse.Successful {
-			if nil == connectResponse.Advice {
-				s.errors <- fmt.Errorf("failed to receive event and no reconnection strategy provided by the server: %s", connectResponse.Error)
-
-				return
+			// Receive event
+			connectResponse, err := s.streamingClient.Connect(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to receive event: %w", err)
 			}
 
-			switch connectResponse.Advice.Reconnect {
-			case responses.AdviceReconnectRetry:
-				// Check if request can be retried
-				if connectResponse.Advice.Interval < 0 {
-					s.errors <- fmt.Errorf("server disallowed for reconnect, stopping")
-
-					return
+			// If not successful, check how to retry
+			if !connectResponse.Successful {
+				if nil == connectResponse.Advice {
+					return fmt.Errorf("failed to receive event and no reconnection strategy provided by the server: %s", connectResponse.Error)
 				}
 
-				// Wait and retry
-				time.Sleep(time.Millisecond * time.Duration(connectResponse.Advice.Interval))
+				switch connectResponse.Advice.Reconnect {
+				case responses.AdviceReconnectRetry:
+					// Check if request can be retried
+					if connectResponse.Advice.Interval < 0 {
+						return fmt.Errorf("server disallowed for reconnect, stopping")
+					}
 
-				continue
+					// Wait and retry
+					time.Sleep(time.Millisecond * time.Duration(connectResponse.Advice.Interval))
 
-			case responses.AdviceReconnectHandshake:
-				// Handshake and retry
-				if _, err := s.streamingClient.Handshake(ctx); err != nil {
-					s.errors <- fmt.Errorf("reconnect handshake error: %w", err)
+					continue
 
-					return
+				case responses.AdviceReconnectHandshake:
+					// Handshake and retry
+					if _, err := s.streamingClient.Handshake(ctx); err != nil {
+						return fmt.Errorf("reconnect handshake error: %w", err)
+					}
+
+					continue
+
+				case responses.AdviceReconnectNone:
+					// Cannot retry
+					return fmt.Errorf("server disallowed for reconnect, stopping")
+
+				default:
+					// Unexpected, cannot retry
+					return fmt.Errorf("unsupported reconnect advice: %s", connectResponse.Advice.Reconnect)
 				}
-
-				continue
-
-			case responses.AdviceReconnectNone:
-				// Cannot retry
-				s.errors <- fmt.Errorf("server disallowed for reconnect, stopping")
-
-				return
-
-			default:
-				// Unexpected, cannot retry
-				s.errors <- fmt.Errorf("unsupported reconnect advice: %s", connectResponse.Advice.Reconnect)
-
-				return
 			}
-		}
 
-		// If successful, send event
-		for _, event := range connectResponse.Events {
-			if _, exists := s.subscriptions[event.Channel]; exists {
-				s.events <- event
-			} else {
-				sdk.Logger(ctx).Debug().Msgf("Received event for unsupported channel: %s", event.Channel)
+			// If successful, send event
+			for _, event := range connectResponse.Events {
+				if _, exists := s.subscriptions[event.Channel]; exists {
+					// Send out the record if possible
+					select {
+					case s.events <- event:
+						// sdk.Record was sent successfully
+
+					case <-s.tomb.Dying():
+						return s.tomb.Err()
+					}
+				} else {
+					sdk.Logger(ctx).Debug().Msgf("Received event for unsupported channel: %s", event.Channel)
+				}
 			}
 		}
 	}
