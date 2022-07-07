@@ -55,16 +55,20 @@ const (
 
 // ConnectResponseEvent represents single piece of data returned in connect response
 type ConnectResponseEvent struct {
-	Data struct {
-		Event struct {
-			CreatedDate time.Time `json:"createdDate"`
-			ReplayID    int       `json:"replayId"`
+	Data    ConnectResponseEventData `json:"data"`
+	Channel string                   `json:"channel"`
+}
 
-			// Type denotes creation, update, delete, or undelete of a record
-			// See: https://developer.salesforce.com/docs/atlas.en-us.236.0.api_streaming.meta/api_streaming/terms.htm
-			Type ConnectResponseEventType `json:"type"`
-		} `json:"event"`
-		SObject map[string]interface{} `json:"sobject"`
-	} `json:"data"`
-	Channel string `json:"channel"`
+type ConnectResponseEventData struct {
+	Event   ConnectResponseEventDataMetadata `json:"event"`
+	SObject map[string]interface{}           `json:"sobject"`
+}
+
+type ConnectResponseEventDataMetadata struct {
+	CreatedDate time.Time `json:"createdDate"`
+	ReplayID    int       `json:"replayId"`
+
+	// Type denotes creation, update, delete, or undelete of a record
+	// See: https://developer.salesforce.com/docs/atlas.en-us.236.0.api_streaming.meta/api_streaming/terms.htm
+	Type ConnectResponseEventType `json:"type"`
 }

@@ -15,15 +15,20 @@
 package main
 
 import (
-	sdk "github.com/conduitio/conduit-connector-sdk"
-	sf "github.com/miquido/conduit-connector-salesforce"
-	sfSource "github.com/miquido/conduit-connector-salesforce/source"
+	"context"
+
+	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth/response"
 )
 
-func main() {
-	sdk.Serve(sdk.Connector{
-		NewSpecification: sf.Specification,
-		NewSource:        sfSource.NewSource,
-		NewDestination:   nil,
-	})
+type oAuthClientMock struct {
+}
+
+func (c *oAuthClientMock) Authenticate(_ context.Context) (response.TokenResponse, error) {
+	return response.TokenResponse{
+		AccessToken: "access-token",
+		InstanceURL: "hxxp://instance.url",
+		ID:          "1",
+		IssuedAt:    "2",
+		Signature:   "3",
+	}, nil
 }

@@ -28,7 +28,15 @@ import (
 	"golang.org/x/net/publicsuffix"
 )
 
-func NewClient(baseURL, accessToken string) (*Client, error) {
+type Client interface {
+	Handshake(ctx context.Context) (responses.SuccessfulHandshakeResponse, error)
+	Connect(ctx context.Context) (responses.ConnectResponse, error)
+	SubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.SubscribeResponse, error)
+	UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error)
+	Disconnect(ctx context.Context) (responses.DisconnectResponse, error)
+}
+
+func NewDefaultClient(baseURL, accessToken string) (Client, error) {
 	jar, err := cookiejar.New(&cookiejar.Options{
 		PublicSuffixList: publicsuffix.List,
 	})
@@ -36,14 +44,14 @@ func NewClient(baseURL, accessToken string) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
+	return &DefaultClient{
 		baseURL:        baseURL,
 		accessToken:    accessToken,
 		longPollClient: &http.Client{Jar: jar},
 	}, nil
 }
 
-type Client struct {
+type DefaultClient struct {
 	baseURL        string
 	accessToken    string
 	clientID       string
@@ -52,7 +60,7 @@ type Client struct {
 
 // Handshake performs a handshake request.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_meta_handshake
-func (s *Client) Handshake(ctx context.Context) (responses.SuccessfulHandshakeResponse, error) {
+func (s *DefaultClient) Handshake(ctx context.Context) (responses.SuccessfulHandshakeResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.HandshakeRequest{})
 	if err != nil {
@@ -80,7 +88,7 @@ func (s *Client) Handshake(ctx context.Context) (responses.SuccessfulHandshakeRe
 
 // Connect performs a connect request.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_meta_connect
-func (s *Client) Connect(ctx context.Context) (responses.ConnectResponse, error) {
+func (s *DefaultClient) Connect(ctx context.Context) (responses.ConnectResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.ConnectRequest{
 		ClientID: s.clientID,
@@ -142,7 +150,7 @@ func (s *Client) Connect(ctx context.Context) (responses.ConnectResponse, error)
 
 // SubscribeToPushTopic performs a subscribe to topic request.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_meta_subscribe
-func (s *Client) SubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.SubscribeResponse, error) {
+func (s *DefaultClient) SubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.SubscribeResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.SubscribePushTopicRequest{
 		ClientID:  s.clientID,
@@ -165,7 +173,7 @@ func (s *Client) SubscribeToPushTopic(ctx context.Context, pushTopic string) (re
 
 // UnsubscribeToPushTopic performs a unsubscribe from topic request.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_meta_unsubscribe
-func (s *Client) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error) {
+func (s *DefaultClient) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.UnsubscribePushTopicRequest{
 		ClientID:  s.clientID,
@@ -188,7 +196,7 @@ func (s *Client) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (
 
 // Disconnect performs a disconnect request.
 // See: https://docs.cometd.org/current7/reference/#_bayeux_meta_disconnect
-func (s *Client) Disconnect(ctx context.Context) (responses.DisconnectResponse, error) {
+func (s *DefaultClient) Disconnect(ctx context.Context) (responses.DisconnectResponse, error) {
 	// Prepare and send request
 	responseData, err := s.httpPost(ctx, requests.DisconnectRequest{
 		ClientID: s.clientID,
@@ -209,7 +217,7 @@ func (s *Client) Disconnect(ctx context.Context) (responses.DisconnectResponse, 
 }
 
 // httpPost sends a POST request to the CometD server
-func (s *Client) httpPost(ctx context.Context, payload requests.Request) ([]byte, error) {
+func (s *DefaultClient) httpPost(ctx context.Context, payload requests.Request) ([]byte, error) {
 	// Prepare the payload
 	requestData, err := payload.MarshalJSON()
 	if err != nil {

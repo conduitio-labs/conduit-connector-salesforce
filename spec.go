@@ -23,6 +23,7 @@ func Specification() sdk.Specification {
 	return sdk.Specification{
 		Name:              "salesforce",
 		Summary:           "A Salesforce source plugin for Conduit.",
+		Description:       "The Conduit plugin supporting Salesforce source.",
 		Version:           "v0.1.0",
 		Author:            "Miquido",
 		DestinationParams: map[string]sdk.Parameter{
