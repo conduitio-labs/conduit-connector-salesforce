@@ -54,6 +54,50 @@ func NewSource() sdk.Source {
 	}
 }
 
+func (s *Source) Parameters() map[string]sdk.Parameter {
+	return map[string]sdk.Parameter{
+		ConfigKeyEnvironment: {
+			Default:     "",
+			Required:    true,
+			Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
+		},
+		ConfigKeyClientID: {
+			Default:     "",
+			Required:    true,
+			Description: "OAuth Client ID (Consumer Key).",
+		},
+		ConfigKeyClientSecret: {
+			Default:     "",
+			Required:    true,
+			Description: "OAuth Client Secret (Consumer Secret).",
+		},
+		ConfigKeyUsername: {
+			Default:     "",
+			Required:    true,
+			Description: "Username.",
+		},
+		ConfigKeyPassword: {
+			Default:     "",
+			Required:    true,
+			Description: "Password.",
+		},
+		ConfigKeySecurityToken: {
+			Default:     "",
+			Required:    false,
+			Description: "Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.",
+		},
+		ConfigKeyPushTopicsNames: {
+			Default:     "",
+			Required:    true,
+			Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
+		},
+		ConfigKeyKeyField: {
+			Default:     "Id",
+			Required:    false,
+			Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
+		},
+	}
+}
 func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err error) {
 	s.config, err = ParseConfig(cfgRaw)
 	if err != nil {
@@ -134,17 +178,39 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 
 		replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
 
-		var action internal.Operation
-
 		switch event.Data.Event.Type {
 		case responses.CreatedEventType:
-			action = internal.OperationInsert
+			return sdk.SourceUtil{}.NewRecordCreate(
+				sdk.Position(replayID),
+				map[string]string{
+					"channel":  event.Channel,
+					"replayId": replayID,
+				},
+				keyValue,
+				sdk.StructuredData(event.Data.SObject),
+			), nil
 
 		case responses.UpdatedEventType, responses.UndeletedEventType:
-			action = internal.OperationUpdate
+			return sdk.SourceUtil{}.NewRecordUpdate(
+				sdk.Position(replayID),
+				map[string]string{
+					"channel":  event.Channel,
+					"replayId": replayID,
+				},
+				keyValue,
+				nil,
+				sdk.StructuredData(event.Data.SObject),
+			), nil
 
 		case responses.DeletedEventType:
-			action = internal.OperationDelete
+			return sdk.SourceUtil{}.NewRecordDelete(
+				sdk.Position(replayID),
+				map[string]string{
+					"channel":  event.Channel,
+					"replayId": replayID,
+				},
+				keyValue,
+			), nil
 
 		default:
 			sdk.Logger(ctx).Info().Msgf(
@@ -152,21 +218,8 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 				event.Data.Event.Type,
 				internal.OperationInsert,
 			)
-
-			action = internal.OperationInsert
+			return sdk.Record{}, sdk.ErrBackoffRetry
 		}
-
-		return sdk.Record{
-			Key:       keyValue,
-			Payload:   sdk.StructuredData(event.Data.SObject),
-			Position:  sdk.Position(replayID),
-			CreatedAt: event.Data.Event.CreatedDate,
-			Metadata: map[string]string{
-				"channel":  event.Channel,
-				"replayId": replayID,
-				"action":   action,
-			},
-		}, nil
 
 	case <-s.tomb.Dead():
 		err := s.tomb.Err()
