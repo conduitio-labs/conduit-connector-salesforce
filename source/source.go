@@ -182,10 +182,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		case responses.CreatedEventType:
 			return sdk.SourceUtil{}.NewRecordCreate(
 				sdk.Position(replayID),
-				map[string]string{
-					"channel":  event.Channel,
-					"replayId": replayID,
-				},
+				s.getMetadata(event),
 				keyValue,
 				sdk.StructuredData(event.Data.SObject),
 			), nil
@@ -193,10 +190,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		case responses.UpdatedEventType, responses.UndeletedEventType:
 			return sdk.SourceUtil{}.NewRecordUpdate(
 				sdk.Position(replayID),
-				map[string]string{
-					"channel":  event.Channel,
-					"replayId": replayID,
-				},
+				s.getMetadata(event),
 				keyValue,
 				nil,
 				sdk.StructuredData(event.Data.SObject),
@@ -205,10 +199,7 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		case responses.DeletedEventType:
 			return sdk.SourceUtil{}.NewRecordDelete(
 				sdk.Position(replayID),
-				map[string]string{
-					"channel":  event.Channel,
-					"replayId": replayID,
-				},
+				s.getMetadata(event),
 				keyValue,
 			), nil
 
@@ -218,7 +209,12 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 				event.Data.Event.Type,
 				internal.OperationInsert,
 			)
-			return sdk.Record{}, sdk.ErrBackoffRetry
+			return sdk.SourceUtil{}.NewRecordCreate(
+				sdk.Position(replayID),
+				s.getMetadata(event),
+				keyValue,
+				sdk.StructuredData(event.Data.SObject),
+			), nil
 		}
 
 	case <-s.tomb.Dead():
@@ -232,6 +228,17 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 	case <-ctx.Done():
 		return sdk.Record{}, ctx.Err()
 	}
+}
+
+func (s *Source) getMetadata(event responses.ConnectResponseEvent) map[string]string {
+	replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
+
+	m := sdk.Metadata{
+		"channel":  event.Channel,
+		"replayId": replayID,
+	}
+	m.SetCreatedAt(event.Data.Event.CreatedDate)
+	return m
 }
 
 func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
