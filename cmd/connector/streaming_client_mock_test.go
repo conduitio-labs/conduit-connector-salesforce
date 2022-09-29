@@ -18,8 +18,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
 )
 
 type streamingClientMock struct {

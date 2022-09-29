@@ -22,8 +22,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth/response"
-	"github.com/miquido/conduit-connector-salesforce/internal/utils"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth/response"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/utils"
 )
 
 type Environment = string

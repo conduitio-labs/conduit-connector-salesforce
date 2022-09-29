@@ -1,4 +1,4 @@
-module github.com/miquido/conduit-connector-salesforce
+module github.com/conduitio-labs/conduit-connector-salesforce
 
 go 1.18
 

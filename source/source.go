@@ -21,11 +21,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/miquido/conduit-connector-salesforce/internal"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth"
 	"gopkg.in/tomb.v2"
 )
 

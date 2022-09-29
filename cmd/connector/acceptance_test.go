@@ -17,11 +17,11 @@ package main
 import (
 	"testing"
 
+	sf "github.com/conduitio-labs/conduit-connector-salesforce"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth"
+	sfSource "github.com/conduitio-labs/conduit-connector-salesforce/source"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	sf "github.com/miquido/conduit-connector-salesforce"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd"
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth"
-	sfSource "github.com/miquido/conduit-connector-salesforce/source"
 )
 
 type CustomConfigurableAcceptanceTestDriver struct {
