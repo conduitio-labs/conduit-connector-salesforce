@@ -76,7 +76,12 @@ There may be need to reconnect while connector is working. Server returns condit
 There are a couple of steps that need to be done to start working with Salesforce connector.
 
 1. Log in into Your Salesforce account, e.g. https://my-demo-app.my.salesforce.com. The environment is `my-demo-app`.
-2. First, if not already done, You need to create connected app and enable OAuth: [Enable OAuth Settings for API Integration](https://help.salesforce.com/s/articleView?id=sf.connected_app_create_api_integration.htm&type=5). Successfully configured app example can be seen below:
+2. First, if not already done, You need to create connected app and enable OAuth: [Enable OAuth Settings for API Integration](https://help.salesforce.com/s/articleView?id=sf.connected_app_create_api_integration.htm&type=5).
+
+    The callback URL is required, but not relevant for this connector, so you can put anything there.
+
+    Successfully configured app example can be seen below:
+
     ![Connected App example](docs/connect_and_configure_app.png)
 3. Copy **Consumer Key** and **Consumer Secret**. If You need these values once again You can always find them in _Setup -> Apps -> App Manager_, find app on the list and choose _View_ option.
     ![View OAuth tokens](docs/view_oauth_tokens.png)

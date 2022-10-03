@@ -16,7 +16,6 @@ package salesforce
 
 import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/miquido/conduit-connector-salesforce/source"
 )
 
 // version is set during the build process (i.e. the Makefile).
@@ -26,55 +25,10 @@ var version = "v0.0.0-dev"
 
 func Specification() sdk.Specification {
 	return sdk.Specification{
-		Name:              "salesforce",
-		Summary:           "A Salesforce source plugin for Conduit.",
-		Description:       "The Conduit plugin supporting Salesforce source.",
-		Version:           version,
-		Author:            "Miquido",
-		DestinationParams: map[string]sdk.Parameter{
-			//
-		},
-		SourceParams: map[string]sdk.Parameter{
-			source.ConfigKeyEnvironment: {
-				Default:     "",
-				Required:    true,
-				Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
-			},
-			source.ConfigKeyClientID: {
-				Default:     "",
-				Required:    true,
-				Description: "OAuth Client ID (Consumer Key).",
-			},
-			source.ConfigKeyClientSecret: {
-				Default:     "",
-				Required:    true,
-				Description: "OAuth Client Secret (Consumer Secret).",
-			},
-			source.ConfigKeyUsername: {
-				Default:     "",
-				Required:    true,
-				Description: "Username.",
-			},
-			source.ConfigKeyPassword: {
-				Default:     "",
-				Required:    true,
-				Description: "Password.",
-			},
-			source.ConfigKeySecurityToken: {
-				Default:     "",
-				Required:    false,
-				Description: "Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.",
-			},
-			source.ConfigKeyPushTopicsNames: {
-				Default:     "",
-				Required:    true,
-				Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
-			},
-			source.ConfigKeyKeyField: {
-				Default:     "Id",
-				Required:    false,
-				Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
-			},
-		},
+		Name:        "salesforce",
+		Summary:     "A Salesforce source plugin for Conduit.",
+		Description: "The Conduit plugin supporting Salesforce source.",
+		Version:     version,
+		Author:      "Miquido & Meroxa, Inc.",
 	}
 }

@@ -53,10 +53,9 @@ func (s *streamingClientMock) Connect(_ context.Context) (responses.ConnectRespo
 		response.Events = append(response.Events, responses.ConnectResponseEvent{
 			Data: responses.ConnectResponseEventData{
 				Event: responses.ConnectResponseEventDataMetadata{
-					CreatedDate: record.CreatedAt,
-					ReplayID:    s.lastIndex,
+					ReplayID: s.lastIndex,
 				},
-				SObject: record.Payload.(sdk.StructuredData),
+				SObject: record.Payload.After.(sdk.StructuredData),
 			},
 			Channel: "MyTopic1",
 		})
