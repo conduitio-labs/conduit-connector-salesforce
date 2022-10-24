@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/conduitio/conduit-connector-sdk v0.3.0
 	github.com/jaswdr/faker v1.15.0
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
