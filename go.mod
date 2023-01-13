@@ -3,7 +3,7 @@ module github.com/miquido/conduit-connector-salesforce
 go 1.18
 
 require (
-	github.com/conduitio/conduit-connector-sdk v0.4.0
+	github.com/conduitio/conduit-connector-sdk v0.4.3
 	github.com/jaswdr/faker v1.16.0
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/net v0.4.0
