@@ -16,6 +16,9 @@ linters-settings:
     ignore-tests: true
   goheader:
     template-path: '.golangci.goheader.template'
+    values:
+      regexp:
+        copyright-year: 20[2-9]\d
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.
@@ -23,7 +26,6 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
     # - depguard
     - dogsled
     - durationcheck
@@ -70,7 +72,6 @@ linters:
     - predeclared
     - rowserrcheck
     - staticcheck
-    - structcheck
     - stylecheck
     - sqlclosecheck
     # - tagliatelle
@@ -81,7 +82,6 @@ linters:
     - unconvert
     # - unparam
     - unused
-    - varcheck
     - wastedassign
     - whitespace
   # - wrapcheck
