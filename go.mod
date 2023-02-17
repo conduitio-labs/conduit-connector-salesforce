@@ -3,7 +3,7 @@ module github.com/miquido/conduit-connector-salesforce
 go 1.18
 
 require (
-	github.com/conduitio/conduit-connector-sdk v0.5.0
+	github.com/conduitio/conduit-connector-sdk v0.5.1
 	github.com/jaswdr/faker v1.16.0
 	github.com/stretchr/testify v1.8.1
 	golang.org/x/net v0.7.0
@@ -40,7 +40,7 @@ require (
 	github.com/spf13/cast v1.3.1 // indirect
 	go.buf.build/grpc/go/conduitio/conduit-connector-protocol v1.4.5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
-	go.uber.org/goleak v1.2.0 // indirect
+	go.uber.org/goleak v1.2.1 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.3.0 // indirect
 	golang.org/x/exp v0.0.0-20221114191408-850992195362 // indirect
