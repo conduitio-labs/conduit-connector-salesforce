@@ -6,7 +6,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.5.1
 	github.com/jaswdr/faker v1.18.1
 	github.com/stretchr/testify v1.8.4
-	golang.org/x/net v0.12.0
+	golang.org/x/net v0.13.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
