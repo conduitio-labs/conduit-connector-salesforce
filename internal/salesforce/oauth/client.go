@@ -22,8 +22,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth/response"
-	"github.com/miquido/conduit-connector-salesforce/internal/utils"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth/response"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/utils"
 )
 
 type Environment = string
@@ -75,7 +75,7 @@ type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Authenticate attempts to authenticate the client with given credentials
+// Authenticate attempts to authenticate the client with given credentials.
 func (a *DefaultClient) Authenticate(ctx context.Context) (response.TokenResponse, error) {
 	// Prepare request payload
 	payload := url.Values{

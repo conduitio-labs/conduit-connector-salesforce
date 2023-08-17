@@ -103,7 +103,7 @@ There are a couple of steps that need to be done to start working with Salesforc
 
         Then for event with value `Id=123, Name=Create summary` Record's Key will be set to `123`.
 
-        Later, this may be utilized by other connectors, e.g. [Elasticsearch connector](https://github.com/miquido/conduit-connector-elasticsearch) will create Document with ID of Record's Key when available.
+        Later, this may be utilized by other connectors, e.g. [Elasticsearch connector](https://github.com/conduitio-labs/conduit-connector-elasticsearch) will create Document with ID of Record's Key when available.
 
 ## Testing
 

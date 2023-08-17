@@ -18,8 +18,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
 )
 
 type streamingClientMock struct {
@@ -79,14 +79,14 @@ func (s *streamingClientMock) SubscribeToPushTopic(_ context.Context, pushTopic 
 	}, nil
 }
 
-func (s *streamingClientMock) UnsubscribeToPushTopic(ctx context.Context, pushTopic string) (responses.UnsubscribeResponse, error) {
+func (s *streamingClientMock) UnsubscribeToPushTopic(context.Context, string) (responses.UnsubscribeResponse, error) {
 	// Make UnsubscribeToPushTopic always successful
 	return responses.UnsubscribeResponse{
 		Successful: true,
 	}, nil
 }
 
-func (s *streamingClientMock) Disconnect(ctx context.Context) (responses.DisconnectResponse, error) {
+func (s *streamingClientMock) Disconnect(context.Context) (responses.DisconnectResponse, error) {
 	// Make Disconnect always successful
 	return responses.DisconnectResponse{
 		Successful: true,

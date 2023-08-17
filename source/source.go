@@ -21,11 +21,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/miquido/conduit-connector-salesforce/internal"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth"
 	"gopkg.in/tomb.v2"
 )
 
@@ -291,7 +291,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	return err
 }
 
-// eventsWorker continuously queries for data updates from Salesforce
+// eventsWorker continuously queries for data updates from Salesforce.
 func (s *Source) eventsWorker() error {
 	defer close(s.events)
 
@@ -364,7 +364,7 @@ func (s *Source) eventsWorker() error {
 	}
 }
 
-// getKeyValue prepares the Key value for Payload
+// getKeyValue prepares the Key value for Payload.
 func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData, error) {
 	if s.config.KeyField == "" {
 		return nil, nil

@@ -22,9 +22,9 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd/requests"
-	"github.com/miquido/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/miquido/conduit-connector-salesforce/internal/utils"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/requests"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/utils"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -216,7 +216,7 @@ func (s *DefaultClient) Disconnect(ctx context.Context) (responses.DisconnectRes
 	return successfulResponses[0], nil
 }
 
-// httpPost sends a POST request to the CometD server
+// httpPost sends a POST request to the CometD server.
 func (s *DefaultClient) httpPost(ctx context.Context, payload requests.Request) ([]byte, error) {
 	// Prepare the payload
 	requestData, err := payload.MarshalJSON()

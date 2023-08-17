@@ -17,7 +17,7 @@ package main
 import (
 	"context"
 
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth/response"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth/response"
 )
 
 type oAuthClientMock struct {

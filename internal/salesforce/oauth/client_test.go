@@ -26,8 +26,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth/response"
 	"github.com/jaswdr/faker"
-	"github.com/miquido/conduit-connector-salesforce/internal/salesforce/oauth/response"
 	"github.com/stretchr/testify/require"
 )
 

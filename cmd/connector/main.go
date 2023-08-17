@@ -15,9 +15,9 @@
 package main
 
 import (
+	sf "github.com/conduitio-labs/conduit-connector-salesforce"
+	sfSource "github.com/conduitio-labs/conduit-connector-salesforce/source"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	sf "github.com/miquido/conduit-connector-salesforce"
-	sfSource "github.com/miquido/conduit-connector-salesforce/source"
 )
 
 func main() {
