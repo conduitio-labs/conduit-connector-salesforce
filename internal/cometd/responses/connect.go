@@ -53,7 +53,7 @@ const (
 	UndeletedEventType = "undeleted"
 )
 
-// ConnectResponseEvent represents single piece of data returned in connect response
+// ConnectResponseEvent represents single piece of data returned in connect response.
 type ConnectResponseEvent struct {
 	Data    ConnectResponseEventData `json:"data"`
 	Channel string                   `json:"channel"`

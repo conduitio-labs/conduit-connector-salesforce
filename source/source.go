@@ -291,7 +291,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	return err
 }
 
-// eventsWorker continuously queries for data updates from Salesforce
+// eventsWorker continuously queries for data updates from Salesforce.
 func (s *Source) eventsWorker() error {
 	defer close(s.events)
 
@@ -364,7 +364,7 @@ func (s *Source) eventsWorker() error {
 	}
 }
 
-// getKeyValue prepares the Key value for Payload
+// getKeyValue prepares the Key value for Payload.
 func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData, error) {
 	if s.config.KeyField == "" {
 		return nil, nil

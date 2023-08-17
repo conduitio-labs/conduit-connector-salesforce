@@ -1,6 +1,3 @@
-run:
-  go: '1.17' # https://github.com/golangci/golangci-lint/issues/2649
-
 linters-settings:
   gofmt:
     simplify: false
@@ -16,6 +13,9 @@ linters-settings:
     ignore-tests: true
   goheader:
     template-path: '.golangci.goheader.template'
+    values:
+      regexp:
+        copyright-year: 20[2-9]\d
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.
@@ -23,7 +23,7 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
+    # - deadcode
     # - depguard
     - dogsled
     - durationcheck
@@ -41,7 +41,7 @@ linters:
     - gocritic
     - gocyclo
     # - cyclop # not interested in package complexities at the moment
-    # - godot
+    - godot
     - gofmt
     # - gofumpt
     - goheader
@@ -57,7 +57,7 @@ linters:
     # - ifshort
     - ineffassign
     # - importas
-    # - lll
+#    - lll
     # - misspell
     - makezero
     # - nakedret
@@ -70,7 +70,7 @@ linters:
     - predeclared
     - rowserrcheck
     - staticcheck
-    - structcheck
+    # - structcheck
     - stylecheck
     - sqlclosecheck
     # - tagliatelle
@@ -81,7 +81,7 @@ linters:
     - unconvert
     # - unparam
     - unused
-    - varcheck
+    # - varcheck
     - wastedassign
     - whitespace
   # - wrapcheck

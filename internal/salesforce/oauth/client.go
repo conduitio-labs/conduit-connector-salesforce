@@ -75,7 +75,7 @@ type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-// Authenticate attempts to authenticate the client with given credentials
+// Authenticate attempts to authenticate the client with given credentials.
 func (a *DefaultClient) Authenticate(ctx context.Context) (response.TokenResponse, error) {
 	// Prepare request payload
 	payload := url.Values{

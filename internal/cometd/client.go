@@ -216,7 +216,7 @@ func (s *DefaultClient) Disconnect(ctx context.Context) (responses.DisconnectRes
 	return successfulResponses[0], nil
 }
 
-// httpPost sends a POST request to the CometD server
+// httpPost sends a POST request to the CometD server.
 func (s *DefaultClient) httpPost(ctx context.Context, payload requests.Request) ([]byte, error) {
 	// Prepare the payload
 	requestData, err := payload.MarshalJSON()
