@@ -9,7 +9,7 @@ require (
 	github.com/golangci/golangci-lint v1.57.2
 	github.com/jaswdr/faker v1.19.1
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/net v0.22.0
+	golang.org/x/net v0.23.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
