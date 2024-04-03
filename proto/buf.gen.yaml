@@ -1,0 +1,14 @@
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: "github.com/conduitio-labs/conduit-connector-salesforce/proto"
+plugins:
+  - plugin: buf.build/protocolbuffers/go:v1.34.1
+    out: .
+    opt:
+      - paths=source_relative
+  - plugin: buf.build/grpc/go:v1.4.0
+    out: .
+    opt:
+      - paths=source_relative

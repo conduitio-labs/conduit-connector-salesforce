@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2022 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,7 @@ import (
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth/response"
 )
 
-type oAuthClientMock struct {
-}
+type oAuthClientMock struct{}
 
 func (c *oAuthClientMock) Authenticate(_ context.Context) (response.TokenResponse, error) {
 	return response.TokenResponse{
