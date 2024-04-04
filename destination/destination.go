@@ -17,6 +17,7 @@ package destination
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -37,6 +38,19 @@ type Destination struct {
 	client *simpleforce.Client
 }
 
+// TODO: move to config file
+const (
+	ConfigKeyEnvironment   = "environment"
+	ConfigKeyClientID      = "clientId"
+	ConfigKeyClientSecret  = "clientSecret"
+	ConfigKeyUsername      = "username"
+	ConfigKeyPassword      = "password"
+	ConfigKeySecurityToken = "securityToken"
+	ConfigKeyKeyField      = "keyField"
+	ConfigKeyObjectName    = "objectName"
+	ConfigKeyInstanceURL   = "instanceURL"
+)
+
 type Config struct {
 	Environment     string
 	ClientID        string
@@ -46,8 +60,8 @@ type Config struct {
 	SecurityToken   string
 	PushTopicsNames []string
 	KeyField        string
-	ObjectName string
-	InstanceURL string
+	ObjectName      string
+	InstanceURL     string
 }
 
 // NewDestination creates the Destination and wraps it in the default middleware.
@@ -68,8 +82,53 @@ func NewDestination() sdk.Destination {
 }
 
 func (d *Destination) Parameters() map[string]sdk.Parameter {
-	// TODO: implement
-	return nil
+	return map[string]sdk.Parameter{
+		ConfigKeyEnvironment: {
+			Default:     "",
+			Required:    true,
+			Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
+		},
+		ConfigKeyClientID: {
+			Default:     "",
+			Required:    true,
+			Description: "OAuth Client ID (Consumer Key).",
+		},
+		ConfigKeyClientSecret: {
+			Default:     "",
+			Required:    true,
+			Description: "OAuth Client Secret (Consumer Secret).",
+		},
+		ConfigKeyUsername: {
+			Default:     "",
+			Required:    true,
+			Description: "Username.",
+		},
+		ConfigKeyPassword: {
+			Default:     "",
+			Required:    true,
+			Description: "Password.",
+		},
+		ConfigKeySecurityToken: {
+			Default:     "",
+			Required:    false,
+			Description: "Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.",
+		},
+		ConfigKeyObjectName: {
+			Default:     "",
+			Required:    true,
+			Description: "The name of the salesforce object used. Example: Order__c",
+		},
+		ConfigKeyInstanceURL: {
+			Default:     "",
+			Required:    true,
+			Description: "URL for the salesforce instance. Example: Order__c",
+		},
+		ConfigKeyKeyField: {
+			Default:     "Id",
+			Required:    false,
+			Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
+		},
+	}
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg map[string]string) error {
@@ -92,7 +151,7 @@ func (d *Destination) Open(ctx context.Context) error {
 
 	err := client.LoginPassword(d.Config.Username, d.Config.Password, d.Config.SecurityToken)
 	if err != nil {
-		return errors.New("Unable to login to Salesforce")
+		return errors.Errorf("Unable to login to Salesforce: %w", err)
 	}
 
 	d.client = client
@@ -101,9 +160,10 @@ func (d *Destination) Open(ctx context.Context) error {
 
 func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, error) {
 	for _, r := range records {
+
 		switch r.Operation {
-		case sdk.OperationCreate, sdk.OperationUpdate:
-			// upsert
+		// TODO: support Upsert with ExternalID and ExternalIDField
+		case sdk.OperationCreate:
 
 			// detect if data is structured, or if it's JSON raw data.
 			var data map[string]interface{}
@@ -113,24 +173,28 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 				if !ok {
 					return 0, errors.New("cannot extract rawData from payload.after")
 				}
-				
+
 				if err := json.Unmarshal(rawData.Bytes(), &data); err != nil {
 					return 0, errors.New("cannot unmarshal JSON from payload.after")
 				}
 			}
-			
+
+			sdk.Logger(ctx).Debug().Msgf("data: %+v", data)
+
 			upsertObj := d.client.SObject(d.Config.ObjectName)
+			
 			for k, v := range data {
-				upsertObj.Set(k, v)
+				sdk.Logger(ctx).Debug().Msgf("setting: %+v to %+v", k, v)
+				upsertObj.Set(fmt.Sprintf("%s__c", k), v)
 			}
 
-			upsertObj = upsertObj.Upsert()
+			upsertObj = upsertObj.Create()
 
-			sdk.Logger(ctx).Debug().Msgf("upsert: %+w", upsertObj)
+			sdk.Logger(ctx).Debug().Msgf("create: %+v", upsertObj)
 		case sdk.OperationDelete:
 			// delete
 			obj := d.client.SObject(d.Config.ObjectName)
-			
+
 			var keyData map[string]interface{}
 			if err := json.Unmarshal(r.Key.Bytes(), &keyData); err != nil {
 				return 0, errors.New("cannot unmarshal JSON from payload.after")
@@ -138,7 +202,7 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 
 			key, ok := keyData[d.Config.KeyField]
 			if !ok {
-				return 0, errors.New("could not find key field %s", d.Config.KeyField)
+				return 0, errors.Errorf("could not find key field %s", d.Config.KeyField)
 			}
 
 			if err := obj.Delete(key.(string)); err != nil {
@@ -151,5 +215,5 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 }
 
 func (d *Destination) Teardown(ctx context.Context) error {
-	return errors.New("unimplemented")
+	return nil
 }
