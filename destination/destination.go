@@ -160,60 +160,70 @@ func (d *Destination) Open(ctx context.Context) error {
 
 func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, error) {
 	for _, r := range records {
+		sdk.Logger(ctx).Debug().Msgf("record: %+v", r)
+		sdk.Logger(ctx).Debug().Msgf(".Payload.After: %+v", r.Payload.After)
+
+		var keyData, payloadData map[string]interface{}
+
+		if err := unmarshal(r.Key, &keyData); err != nil {
+			return 0, errors.Errorf("cannot extract data from key: %w", err)
+		}
+
+		sfObj := d.client.SObject(d.Config.ObjectName)
 
 		switch r.Operation {
-		// TODO: support Upsert with ExternalID and ExternalIDField
-		case sdk.OperationCreate:
-
-			// detect if data is structured, or if it's JSON raw data.
-			var data map[string]interface{}
-			data, ok := r.Payload.After.(sdk.StructuredData)
-			if !ok {
-				rawData, ok := r.Payload.After.(sdk.RawData)
-				if !ok {
-					return 0, errors.New("cannot extract rawData from payload.after")
-				}
-
-				if err := json.Unmarshal(rawData.Bytes(), &data); err != nil {
-					return 0, errors.New("cannot unmarshal JSON from payload.after")
-				}
+		case sdk.OperationSnapshot, sdk.OperationCreate, sdk.OperationUpdate:
+			if err := unmarshal(r.Payload.After, &payloadData); err != nil {
+				return 0, errors.Errorf("cannot extract data from payload.After: %w", err)
 			}
-
-			sdk.Logger(ctx).Debug().Msgf("data: %+v", data)
-
-			upsertObj := d.client.SObject(d.Config.ObjectName)
 			
-			for k, v := range data {
+			// Set data fields
+			for k, v := range payloadData {
 				sdk.Logger(ctx).Debug().Msgf("setting: %+v to %+v", k, v)
-				upsertObj.Set(fmt.Sprintf("%s__c", k), v)
-			}
-
-			upsertObj = upsertObj.Create()
-
-			sdk.Logger(ctx).Debug().Msgf("create: %+v", upsertObj)
-		case sdk.OperationDelete:
-			// delete
-			obj := d.client.SObject(d.Config.ObjectName)
-
-			var keyData map[string]interface{}
-			if err := json.Unmarshal(r.Key.Bytes(), &keyData); err != nil {
-				return 0, errors.New("cannot unmarshal JSON from payload.after")
-			}
-
-			key, ok := keyData[d.Config.KeyField]
-			if !ok {
-				return 0, errors.Errorf("could not find key field %s", d.Config.KeyField)
-			}
-
-			if err := obj.Delete(key.(string)); err != nil {
-				return 0, errors.Errorf("failed to delete onj: %w", err)
+				sfObj = sfObj.Set(fmt.Sprintf("%s__c", k), v)
 			}
 		}
+
+		switch r.Operation {
+		case sdk.OperationUpdate:
+			sfObj = sfObj.Set("updated_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
+		case sdk.OperationDelete:
+			sfObj = sfObj.Set("deleted_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
+		}
+
+		// set ExternalIDField and the ID field
+		keyStr := fmt.Sprint(keyData[d.Config.KeyField])
+		sdk.Logger(ctx).Debug().Msgf("ID: %s", keyStr)
+		idField := fmt.Sprintf("%s__c", d.Config.KeyField)
+		sfObj = sfObj.Set("ExternalIDField", idField)
+		sfObj = sfObj.Set(idField, keyStr)
+
+		sdk.Logger(ctx).Debug().Msgf("ExternalID before upsert: %s", sfObj.ExternalID())
+		sdk.Logger(ctx).Debug().Msgf("sfObj right before upsert: %+v", sfObj)
+
+		sfObj = sfObj.Upsert()
+
+		sdk.Logger(ctx).Debug().Msgf("sfObj after upsert: %+v", sfObj)
 	}
 
 	return len(records), nil
 }
 
 func (d *Destination) Teardown(ctx context.Context) error {
+	return nil
+}
+
+func unmarshal(d sdk.Data, m *map[string]interface{}) error {
+	// detect if data is structured, or if it's JSON raw data.
+	data, ok := d.(sdk.StructuredData)
+	if ok {
+		*m = data
+		return nil
+	}
+
+	if err := json.Unmarshal(d.Bytes(), m); err != nil {
+		errors.New("cannot unmarshal JSON")
+	}
+
 	return nil
 }
