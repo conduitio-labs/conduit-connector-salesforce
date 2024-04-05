@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -49,6 +50,7 @@ const (
 	ConfigKeyKeyField      = "keyField"
 	ConfigKeyObjectName    = "objectName"
 	ConfigKeyInstanceURL   = "instanceURL"
+	ConfigKeyHardDelete = "hardDelete"
 )
 
 type Config struct {
@@ -62,6 +64,7 @@ type Config struct {
 	KeyField        string
 	ObjectName      string
 	InstanceURL     string
+	HardDelete bool
 }
 
 // NewDestination creates the Destination and wraps it in the default middleware.
@@ -128,6 +131,11 @@ func (d *Destination) Parameters() map[string]sdk.Parameter {
 			Required:    false,
 			Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
 		},
+		ConfigKeyHardDelete: {
+			Default:     "false",
+			Required:    false,
+			Description: "`true` will turn on hard-deletes, removing objects via the DELETE method on Salesforce API. `false` will perform soft-deletes with an updated_at timestamp.",
+		},
 	}
 }
 
@@ -160,9 +168,6 @@ func (d *Destination) Open(ctx context.Context) error {
 
 func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, error) {
 	for _, r := range records {
-		sdk.Logger(ctx).Debug().Msgf("record: %+v", r)
-		sdk.Logger(ctx).Debug().Msgf(".Payload.After: %+v", r.Payload.After)
-
 		var keyData, payloadData map[string]interface{}
 
 		if err := unmarshal(r.Key, &keyData); err != nil {
@@ -170,6 +175,35 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 		}
 
 		sfObj := d.client.SObject(d.Config.ObjectName)
+
+		// set ExternalIDField & ExternalID
+		keyStr := fmt.Sprint(keyData[d.Config.KeyField])
+
+		switch r.Operation {
+		case sdk.OperationUpdate, sdk.OperationDelete:
+			// fetch sfObj by key
+			q := fmt.Sprintf(
+				"SELECT FIELDS(ALL) FROM %s WHERE %s__c = '%s' LIMIT 1", 
+				d.Config.ObjectName, 
+				d.Config.KeyField,
+				keyStr,
+			)
+			result, err := d.client.Query(q)
+			if err != nil {
+				return 0, errors.Errorf("failed to get object from salesforce: %w", err)
+			}
+
+			if len(result.Records) != 1 {
+				return 0, errors.Errorf("unexpected number of matched records from salesforce: %w", err)
+			}
+			
+			// set salesforce ID, needed for updates & deletes.
+			sfObj = sfObj.Set("Id", result.Records[0].ID())
+		}
+
+		idField := fmt.Sprintf("%s__c", strings.ToUpper(d.Config.KeyField))
+		sfObj = sfObj.Set("ExternalIDField", idField)
+		sfObj = sfObj.Set(idField, keyStr)
 
 		switch r.Operation {
 		case sdk.OperationSnapshot, sdk.OperationCreate, sdk.OperationUpdate:
@@ -179,42 +213,40 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 			
 			// Set data fields
 			for k, v := range payloadData {
-				sdk.Logger(ctx).Debug().Msgf("setting: %+v to %+v", k, v)
+				// we already set the key above
+				if k == d.Config.KeyField {
+					continue
+				}
 				sfObj = sfObj.Set(fmt.Sprintf("%s__c", k), v)
 			}
 		}
 
 		switch r.Operation {
-		case sdk.OperationUpdate:
+		case sdk.OperationSnapshot, sdk.OperationCreate, sdk.OperationUpdate:
 			sfObj = sfObj.Set("updated_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
+			sfObj = sfObj.Upsert()
 		case sdk.OperationDelete:
-			sfObj = sfObj.Set("deleted_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
+			if d.Config.HardDelete {
+				if err := sfObj.Delete(); err != nil {
+					return 0, errors.Errorf("error deleting record: %w", err)
+				}
+			} else {
+				sfObj = sfObj.Set("deleted_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
+				sfObj = sfObj.Upsert()
+			}
 		}
-
-		// set ExternalIDField and the ID field
-		keyStr := fmt.Sprint(keyData[d.Config.KeyField])
-		sdk.Logger(ctx).Debug().Msgf("ID: %s", keyStr)
-		idField := fmt.Sprintf("%s__c", d.Config.KeyField)
-		sfObj = sfObj.Set("ExternalIDField", idField)
-		sfObj = sfObj.Set(idField, keyStr)
-
-		sdk.Logger(ctx).Debug().Msgf("ExternalID before upsert: %s", sfObj.ExternalID())
-		sdk.Logger(ctx).Debug().Msgf("sfObj right before upsert: %+v", sfObj)
-
-		sfObj = sfObj.Upsert()
-
-		sdk.Logger(ctx).Debug().Msgf("sfObj after upsert: %+v", sfObj)
 	}
 
 	return len(records), nil
 }
 
 func (d *Destination) Teardown(ctx context.Context) error {
+	// TODO: implement
 	return nil
 }
 
 func unmarshal(d sdk.Data, m *map[string]interface{}) error {
-	// detect if data is structured, or if it's JSON raw data.
+	// detect if data is already structured, or if it's JSON raw data.
 	data, ok := d.(sdk.StructuredData)
 	if ok {
 		*m = data
