@@ -55,6 +55,31 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	return nil
 }
 
+type Position struct {
+	ReplayID  []byte
+	TopicName string
+}
+
+func parsePosition(sdkPos sdk.Position) Position {
+	var p Position
+	if err := json.Unmarshal(sdkPos, &p); err != nil {
+		// this should be impossible
+		panic("could not unmarshal position")
+	}
+
+	return p
+}
+
+func (p Position) sdkPosition() sdk.Position {
+	bs, err := json.Marshal(p)
+	if err != nil {
+		// this should be impossible
+		panic("could not marshal position")
+	}
+
+	return sdk.Position(bs)
+}
+
 func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	s.client, err = NewGRPCClient()
 	if err != nil {
@@ -80,27 +105,52 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	}
 	sdk.Logger(ctx).Info().Msg("fetched user info")
 
-	topic, err := s.client.GetTopic(s.config.TopicName)
-	if err != nil {
-		return fmt.Errorf("could not fetch topic: %w", err)
-	}
-	sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
+	if sdkPos != nil {
+		pos := parsePosition(sdkPos)
+		topic, err := s.client.GetTopic(pos.TopicName)
+		if err != nil {
+			return fmt.Errorf("could not fetch topic: %w", err)
+		}
+		sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
 
-	if !topic.GetCanSubscribe() {
-		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
-	}
+		if !topic.GetCanSubscribe() {
+			return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
+		}
 
-	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(
-		ctx,
-		s.config.TopicName,
-		proto.ReplayPreset_LATEST,
-		nil)
-	if err != nil {
-		return fmt.Errorf("could not subscribe to topic")
-	}
-	sdk.Logger(ctx).Info().Msgf("subscribed to topic %s", topic.TopicName)
+		s.subscribeClient, s.currReplayId, err = s.client.Subscribe(
+			ctx,
+			s.config.TopicName,
+			proto.ReplayPreset_CUSTOM,
+			pos.ReplayID)
+		if err != nil {
+			return fmt.Errorf("could not subscribe to topic")
+		}
+		sdk.Logger(ctx).Info().Msgf("subscribed to topic %s", topic.TopicName)
 
-	return nil
+		return nil
+	} else {
+		topic, err := s.client.GetTopic(s.config.TopicName)
+		if err != nil {
+			return fmt.Errorf("could not fetch topic: %w", err)
+		}
+		sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
+
+		if !topic.GetCanSubscribe() {
+			return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
+		}
+
+		s.subscribeClient, s.currReplayId, err = s.client.Subscribe(
+			ctx,
+			s.config.TopicName,
+			proto.ReplayPreset_LATEST,
+			nil)
+		if err != nil {
+			return fmt.Errorf("could not subscribe to topic")
+		}
+		sdk.Logger(ctx).Info().Msgf("subscribed to topic %s", topic.TopicName)
+
+		return nil
+	}
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
@@ -110,23 +160,27 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	}
 	s.currReplayId = currReplayId
 
-	bs, err := json.Marshal(map[string]any{"events": recvEvents})
+	bs, err := json.Marshal(recvEvents)
 	if err != nil {
 		return rec, fmt.Errorf("failed to marshal events")
 	}
 
 	var (
-		position sdk.Position
-		metadata sdk.Metadata
-		key      sdk.Data = sdk.RawData(currReplayId)
-		payload  sdk.Data = sdk.RawData(bs)
+		position = Position{currReplayId, s.config.TopicName}
+		sdkPos   = position.sdkPosition()
+		metadata = sdk.Metadata{}
+		key      = sdk.RawData(currReplayId)
+		payload  = sdk.RawData(bs)
 	)
 
-	rec = sdk.Util.Source.NewRecordCreate(position, metadata, key, payload)
+	rec = sdk.Util.Source.NewRecordCreate(sdkPos, metadata, key, payload)
 	return rec, nil
 }
 
 func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
+	// The pub/sub api does not offer a way to acknowledge events. To receive
+	// the latest events produced we rely on the ReplayPreset_LATEST, from the
+	// grpc generated code.
 	return nil
 }
 
