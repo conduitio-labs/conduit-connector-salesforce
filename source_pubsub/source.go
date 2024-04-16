@@ -91,6 +91,7 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	}
 
 	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(
+		ctx,
 		s.config.TopicName,
 		proto.ReplayPreset_LATEST,
 		nil)
@@ -103,7 +104,7 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
-	recvEvents, currReplayId, err := s.client.Recv(s.subscribeClient, s.currReplayId)
+	recvEvents, currReplayId, err := s.client.Recv(ctx, s.subscribeClient, s.currReplayId)
 	if err != nil {
 		return rec, err
 	}

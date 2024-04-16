@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/proto"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/linkedin/goavro/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -112,8 +112,6 @@ func (c *PubSubClient) GetTopic(topicName string) (*proto.TopicInfo, error) {
 	defer cancelFn()
 
 	resp, err := c.pubSubClient.GetTopic(ctx, req, grpc.Trailer(&trailer))
-	printTrailer(trailer)
-
 	if err != nil {
 		return nil, err
 	}
@@ -133,8 +131,6 @@ func (c *PubSubClient) GetSchema(schemaId string) (*proto.SchemaInfo, error) {
 	defer cancelFn()
 
 	resp, err := c.pubSubClient.GetSchema(ctx, req, grpc.Trailer(&trailer))
-	printTrailer(trailer)
-
 	if err != nil {
 		return nil, err
 	}
@@ -147,6 +143,7 @@ func (c *PubSubClient) GetSchema(schemaId string) (*proto.SchemaInfo, error) {
 // return the last successfully consumed ReplayId as well as the error message. If no messages were successfully consumed then this method will return
 // the same ReplayId that it originally received as a parameter
 func (c *PubSubClient) Subscribe(
+	ctx context.Context,
 	topicName string,
 	replayPreset proto.ReplayPreset,
 	replayId []byte,
@@ -167,7 +164,7 @@ func (c *PubSubClient) Subscribe(
 
 	err = subscribeClient.Send(initialFetchRequest)
 	if err == io.EOF {
-		log.Printf("WARNING - EOF error returned from initial Send call, proceeding anyway")
+		sdk.Logger(ctx).Warn().Msg("EOF error returned from initial Send call, proceeding anyway")
 	} else if err != nil {
 		return nil, replayId, err
 	}
@@ -176,22 +173,21 @@ func (c *PubSubClient) Subscribe(
 }
 
 func (c *PubSubClient) Recv(
+	ctx context.Context,
 	subscribeClient proto.PubSub_SubscribeClient,
 	replayId []byte,
 ) ([]map[string]any, []byte, error) {
-	log.Printf("Waiting for events...")
+	sdk.Logger(ctx).Trace().Msg("Waiting for events...")
 	resp, err := subscribeClient.Recv()
 	if err == io.EOF {
-		printTrailer(subscribeClient.Trailer())
 		return nil, replayId, fmt.Errorf("stream closed")
 	} else if err != nil {
-		printTrailer(subscribeClient.Trailer())
 		return nil, replayId, err
 	}
 
 	var requestedEvents []map[string]any
 	for _, event := range resp.Events {
-		codec, err := c.fetchCodec(event.GetEvent().GetSchemaId())
+		codec, err := c.fetchCodec(ctx, event.GetEvent().GetSchemaId())
 		if err != nil {
 			return requestedEvents, replayId, err
 		}
@@ -216,20 +212,20 @@ func (c *PubSubClient) Recv(
 
 // Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache
 // then a GetSchema call is made and the corresponding codec is cached for future use
-func (c *PubSubClient) fetchCodec(schemaId string) (*goavro.Codec, error) {
+func (c *PubSubClient) fetchCodec(ctx context.Context, schemaId string) (*goavro.Codec, error) {
 	codec, ok := c.schemaCache[schemaId]
 	if ok {
-		log.Printf("Fetched cached codec...")
+		sdk.Logger(ctx).Trace().Msg("Fetched cached codec...")
 		return codec, nil
 	}
 
-	log.Printf("Making GetSchema request for uncached schema...")
+	sdk.Logger(ctx).Trace().Msg("Making GetSchema request for uncached schema...")
 	schema, err := c.GetSchema(schemaId)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Printf("Creating codec from uncached schema...")
+	sdk.Logger(ctx).Trace().Msg("Creating codec from uncached schema...")
 	codec, err = goavro.NewCodec(schema.GetSchemaJson())
 	if err != nil {
 		return nil, err
@@ -245,7 +241,6 @@ const (
 	instanceHeader = "instanceurl"
 	tenantHeader   = "tenantid"
 )
-
 
 // Returns a new context with the necessary authentication parameters for the gRPC server
 func (c *PubSubClient) getAuthContext() context.Context {
@@ -265,18 +260,4 @@ func getCerts() *x509.CertPool {
 	}
 
 	return x509.NewCertPool()
-}
-
-// Helper function to display trailers on the console in a more readable format
-func printTrailer(trailer metadata.MD) {
-	if len(trailer) == 0 {
-		log.Printf("no trailers returned")
-		return
-	}
-
-	log.Printf("beginning of trailers")
-	for key, val := range trailer {
-		log.Printf("[trailer] = %s, [value] = %s", key, val)
-	}
-	log.Printf("end of trailers")
 }
