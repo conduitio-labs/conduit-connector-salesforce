@@ -16,12 +16,6 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
-const (
-	tokenHeader    = "accesstoken"
-	instanceHeader = "instanceurl"
-	tenantHeader   = "tenantid"
-)
-
 var (
 	// topic and subscription-related variables
 
@@ -161,7 +155,6 @@ func (c *PubSubClient) Subscribe(
 	if err != nil {
 		return nil, replayId, err
 	}
-	defer subscribeClient.CloseSend()
 
 	initialFetchRequest := &proto.FetchRequest{
 		TopicName:    topicName,
@@ -173,9 +166,6 @@ func (c *PubSubClient) Subscribe(
 	}
 
 	err = subscribeClient.Send(initialFetchRequest)
-	// If the Send call returns an EOF error then print a log message but do not return immediately. Instead, let the Recv call (below) determine
-	// if there's a more specific error that can be returned
-	// See the SendMsg description at https://pkg.go.dev/google.golang.org/grpc#ClientStream
 	if err == io.EOF {
 		log.Printf("WARNING - EOF error returned from initial Send call, proceeding anyway")
 	} else if err != nil {
@@ -216,7 +206,6 @@ func (c *PubSubClient) Recv(
 			return requestedEvents, replayId, fmt.Errorf("error casting parsed event: %v", body)
 		}
 
-		// Again, this should be stored in a persistent external datastore instead of a variable
 		replayId = event.GetReplayId()
 
 		requestedEvents = append(requestedEvents, body)
@@ -251,13 +240,22 @@ func (c *PubSubClient) fetchCodec(schemaId string) (*goavro.Codec, error) {
 	return codec, nil
 }
 
+const (
+	tokenHeader    = "accesstoken"
+	instanceHeader = "instanceurl"
+	tenantHeader   = "tenantid"
+)
+
+
 // Returns a new context with the necessary authentication parameters for the gRPC server
 func (c *PubSubClient) getAuthContext() context.Context {
-	return metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
+	pairs := metadata.Pairs(
 		tokenHeader, c.accessToken,
 		instanceHeader, c.instanceURL,
 		tenantHeader, c.orgID,
-	))
+	)
+
+	return metadata.NewOutgoingContext(context.Background(), pairs)
 }
 
 // Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead
