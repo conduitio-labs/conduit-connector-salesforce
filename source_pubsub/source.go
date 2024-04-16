@@ -23,6 +23,9 @@ type Config struct {
 
 	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
 	OAuthEndpoint string `json:"oauth_endpoint" validate:"required"`
+
+	// TopicName is the topic the source connector will subscribe to
+	TopicName string `json:"topic_name" validate:"required"`
 }
 
 type Source struct {
@@ -60,16 +63,22 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 
 	sdk.Logger(ctx).Info().Msg("successfully created GRPCClient client")
 
-	if err := s.client.Authenticate(); err != nil {
+	creds := Credentials{
+		ClientID:      s.config.ClientID,
+		ClientSecret:  s.config.ClientSecret,
+		OAuthEndpoint: s.config.OAuthEndpoint,
+	}
+
+	if err := s.client.Authenticate(creds); err != nil {
 		return fmt.Errorf("could not authenticate: %w", err)
 	}
 
-	err = s.client.FetchUserInfo()
+	err = s.client.FetchUserInfo(s.config.OAuthEndpoint)
 	if err != nil {
 		return fmt.Errorf("could not fetch user info: %w", err)
 	}
 
-	topic, err := s.client.GetTopic()
+	topic, err := s.client.GetTopic(s.config.TopicName)
 	if err != nil {
 		return fmt.Errorf("could not fetch topic: %w", err)
 	}
@@ -78,7 +87,7 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", common.TopicName)
 	}
 
-	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(common.ReplayPreset, nil)
+	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(s.config.TopicName, common.ReplayPreset, nil)
 	if err != nil {
 		return fmt.Errorf("could not subscribe to topic")
 	}

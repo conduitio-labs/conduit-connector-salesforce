@@ -33,6 +33,14 @@ func (Config) Parameters() map[string]sdk.Parameter {
 				sdk.ValidationRequired{},
 			},
 		},
+		"topic_name": {
+			Default:     "",
+			Description: "topic_name is the topic the source connector will subscribe to",
+			Type:        sdk.ParameterTypeString,
+			Validations: []sdk.Validation{
+				sdk.ValidationRequired{},
+			},
+		},
 		"username": {
 			Default:     "",
 			Description: "username is the client secret from the salesforce app",

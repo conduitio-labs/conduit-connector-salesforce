@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"sync"
 	"time"
 
-	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/common"
 	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/proto"
 	"github.com/linkedin/goavro/v2"
 	"google.golang.org/grpc"
@@ -22,6 +20,15 @@ const (
 	tokenHeader    = "accesstoken"
 	instanceHeader = "instanceurl"
 	tenantHeader   = "tenantid"
+)
+
+var (
+	// topic and subscription-related variables
+
+	// gRPC server variables
+	GRPCEndpoint    = "api.pubsub.salesforce.com:7443"
+	GRPCDialTimeout = 5 * time.Second
+	GRPCCallTimeout = 5 * time.Second
 )
 
 type PubSubClient struct {
@@ -37,6 +44,35 @@ type PubSubClient struct {
 	schemaCache map[string]*goavro.Codec
 }
 
+// Creates a new connection to the gRPC server and returns the wrapper struct
+func NewGRPCClient() (*PubSubClient, error) {
+	dialOpts := []grpc.DialOption{
+		grpc.WithBlock(),
+	}
+
+	if GRPCEndpoint == "localhost:7011" {
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	} else {
+		certs := getCerts()
+		creds := credentials.NewClientTLSFromCert(certs, "")
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
+	}
+
+	ctx, cancelFn := context.WithTimeout(context.Background(), GRPCDialTimeout)
+	defer cancelFn()
+
+	conn, err := grpc.DialContext(ctx, GRPCEndpoint, dialOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return &PubSubClient{
+		conn:         conn,
+		pubSubClient: proto.NewPubSubClient(conn),
+		schemaCache:  make(map[string]*goavro.Codec),
+	}, nil
+}
+
 // Closes the underlying connection to the gRPC server
 func (c *PubSubClient) Close() {
 	c.conn.Close()
@@ -44,8 +80,8 @@ func (c *PubSubClient) Close() {
 
 // Makes a call to the OAuth server to fetch credentials. Credentials are stored as part of the PubSubClient object so that they can be
 // referenced later in other methods
-func (c *PubSubClient) Authenticate() error {
-	resp, err := Login()
+func (c *PubSubClient) Authenticate(creds Credentials) error {
+	resp, err := Login(creds)
 	if err != nil {
 		return err
 	}
@@ -58,8 +94,8 @@ func (c *PubSubClient) Authenticate() error {
 
 // Makes a call to the OAuth server to fetch user info. User info is stored as part of the PubSubClient object so that it can be referenced
 // later in other methods
-func (c *PubSubClient) FetchUserInfo() error {
-	resp, err := UserInfo(c.accessToken)
+func (c *PubSubClient) FetchUserInfo(oauthEndpoint string) error {
+	resp, err := UserInfo(oauthEndpoint, c.accessToken)
 	if err != nil {
 		return err
 	}
@@ -71,14 +107,14 @@ func (c *PubSubClient) FetchUserInfo() error {
 }
 
 // Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic
-func (c *PubSubClient) GetTopic() (*proto.TopicInfo, error) {
+func (c *PubSubClient) GetTopic(topicName string) (*proto.TopicInfo, error) {
 	var trailer metadata.MD
 
 	req := &proto.TopicRequest{
-		TopicName: common.TopicName,
+		TopicName: topicName,
 	}
 
-	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), common.GRPCCallTimeout)
+	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
 	defer cancelFn()
 
 	resp, err := c.pubSubClient.GetTopic(ctx, req, grpc.Trailer(&trailer))
@@ -99,7 +135,7 @@ func (c *PubSubClient) GetSchema(schemaId string) (*proto.SchemaInfo, error) {
 		SchemaId: schemaId,
 	}
 
-	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), common.GRPCCallTimeout)
+	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
 	defer cancelFn()
 
 	resp, err := c.pubSubClient.GetSchema(ctx, req, grpc.Trailer(&trailer))
@@ -116,7 +152,11 @@ func (c *PubSubClient) GetSchema(schemaId string) (*proto.SchemaInfo, error) {
 // fetch data from the topic. This method will continuously consume messages unless an error occurs; if an error does occur then this method will
 // return the last successfully consumed ReplayId as well as the error message. If no messages were successfully consumed then this method will return
 // the same ReplayId that it originally received as a parameter
-func (c *PubSubClient) Subscribe(replayPreset proto.ReplayPreset, replayId []byte) (proto.PubSub_SubscribeClient, []byte, error) {
+func (c *PubSubClient) Subscribe(
+	topicName string,
+	replayPreset proto.ReplayPreset,
+	replayId []byte,
+) (proto.PubSub_SubscribeClient, []byte, error) {
 	ctx, cancelFn := context.WithCancel(c.getAuthContext())
 	defer cancelFn()
 
@@ -127,9 +167,9 @@ func (c *PubSubClient) Subscribe(replayPreset proto.ReplayPreset, replayId []byt
 	defer subscribeClient.CloseSend()
 
 	initialFetchRequest := &proto.FetchRequest{
-		TopicName:    common.TopicName,
+		TopicName:    topicName,
 		ReplayPreset: replayPreset,
-		NumRequested: common.Appetite,
+		NumRequested: 5,
 	}
 	if replayPreset == proto.ReplayPreset_CUSTOM && replayId != nil {
 		initialFetchRequest.ReplayId = replayId
@@ -210,225 +250,6 @@ func (c *PubSubClient) fetchCodec(schemaId string) (*goavro.Codec, error) {
 	return codec, nil
 }
 
-// Wrapper function around the Publish RPC. This will add the OAuth credentials and produce a single hardcoded event to the specified topic.
-func (c *PubSubClient) Publish(schema *proto.SchemaInfo) error {
-	log.Printf("Creating codec from schema...")
-	codec, err := goavro.NewCodec(schema.SchemaJson)
-	if err != nil {
-		return err
-	}
-
-	sampleEvent := map[string]interface{}{
-		"CreatedDate":        time.Now().Unix(),
-		"CreatedById":        c.userID,
-		"Mileage__c":         goavro.Union("double", 95443.0),
-		"Cost__c":            goavro.Union("double", 99.40),
-		"WorkDescription__c": goavro.Union("string", "Replaced front brakes"),
-	}
-
-	payload, err := codec.BinaryFromNative(nil, sampleEvent)
-	if err != nil {
-		return err
-	}
-
-	var trailer metadata.MD
-
-	req := &proto.PublishRequest{
-		TopicName: common.TopicName,
-		Events: []*proto.ProducerEvent{
-			{
-				SchemaId: schema.GetSchemaId(),
-				Payload:  payload,
-			},
-		},
-	}
-
-	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), common.GRPCCallTimeout)
-	defer cancelFn()
-
-	pubResp, err := c.pubSubClient.Publish(ctx, req, grpc.Trailer(&trailer))
-	printTrailer(trailer)
-
-	if err != nil {
-		return err
-	}
-
-	result := pubResp.GetResults()
-	if result == nil {
-		return fmt.Errorf("nil result returned when publishing to %s", common.TopicName)
-	}
-
-	if err := result[0].GetError(); err != nil {
-		return fmt.Errorf(result[0].GetError().GetMsg())
-	}
-
-	return nil
-}
-
-// Wrapper function around the PublishStream RPC. This will add the OAuth credentials and produce an event to the topic every five seconds
-func (c *PubSubClient) PublishStream(schema *proto.SchemaInfo) error {
-	log.Printf("Creating codec from schema...")
-	codec, err := goavro.NewCodec(schema.SchemaJson)
-	if err != nil {
-		return err
-	}
-
-	ctx, cancelFn := context.WithCancel(c.getAuthContext())
-	defer cancelFn()
-
-	publishClient, err := c.pubSubClient.PublishStream(ctx)
-	if err != nil {
-		return err
-	}
-
-	sampleEvent := map[string]interface{}{
-		"CreatedDate":        time.Now().Unix(),
-		"CreatedById":        c.userID,
-		"Mileage__c":         goavro.Union("double", 95443.0),
-		"Cost__c":            goavro.Union("double", 99.40),
-		"WorkDescription__c": goavro.Union("string", "Replaced front brakes"),
-	}
-
-	payload, err := codec.BinaryFromNative(nil, sampleEvent)
-	if err != nil {
-		return err
-	}
-
-	publishRequest := &proto.PublishRequest{
-		TopicName: common.TopicName,
-		Events: []*proto.ProducerEvent{
-			{
-				SchemaId: schema.GetSchemaId(),
-				Payload:  payload,
-			},
-		},
-	}
-
-	err = publishClient.Send(publishRequest)
-	// If the Send call returns an EOF error then print a log message but do not return immediately. Instead, let the Recv call (below) determine
-	// if there's a more specific error that can be returned
-	// See the SendMsg description at https://pkg.go.dev/google.golang.org/grpc#ClientStream
-	if err == io.EOF {
-		log.Printf("WARNING - EOF error returned from initial Send call, proceeding anyway")
-	} else if err != nil {
-		return err
-	}
-
-	log.Printf("Entering event loop...")
-
-	var resErrMutex sync.Mutex
-	var resErr error
-
-	shutdownGoroutine := func(err error) {
-		cancelFn()
-
-		resErrMutex.Lock()
-		defer resErrMutex.Unlock()
-
-		// only capture the first error returned
-		if resErr == nil {
-			resErr = err
-		}
-	}
-
-	wg := sync.WaitGroup{}
-	wg.Add(2)
-
-	// sender goroutine. This goroutine will attempt to publish a new event every 5 seconds. This goroutine will run until one of the following
-	// conditions is met:
-	// 1. the receiver goroutine returned an error and exited
-	// 2. this goroutine encounters an error while publishing
-	go func() {
-		defer wg.Done()
-		defer publishClient.CloseSend()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				time.Sleep(5 * time.Second)
-
-				log.Printf("Sending next PublishRequest...")
-				sampleEvent["CreatedDate"] = time.Now().Unix()
-
-				payload, sendErr := codec.BinaryFromNative(nil, sampleEvent)
-				if sendErr != nil {
-					shutdownGoroutine(sendErr)
-					return
-				}
-
-				publishRequest := &proto.PublishRequest{
-					TopicName: common.TopicName,
-					Events: []*proto.ProducerEvent{
-						{
-							SchemaId: schema.GetSchemaId(),
-							Payload:  payload,
-						},
-					},
-				}
-
-				sendErr = publishClient.Send(publishRequest)
-				// if we encounter an EOF error from the Send method then exit this goroutine without canceling the context or recording the error.
-				// The Recv method called in the receiver goroutine may return a more specific error explaining why the stream was closed.
-				// See the SendMsg description at https://pkg.go.dev/google.golang.org/grpc#ClientStream
-				if sendErr == io.EOF {
-					log.Printf("WARNING - EOF error returned from subsequent Send call, proceeding anyway")
-					return
-				} else if sendErr != nil {
-					shutdownGoroutine(sendErr)
-					return
-				}
-			}
-		}
-	}()
-
-	// receiver goroutine. This goroutine will attempt to receive the PublishStream responses as they are sent back from the Pub/Sub API. This
-	// goroutine will run until one of the following conditions is met:
-	// 1. the sender goroutine returned an error and exited
-	// 2. this goroutine either encounters an error while receiving or the PublishStream response indicates an error occurred while publishing
-	go func() {
-		defer wg.Done()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				pubResp, recvErr := publishClient.Recv()
-				if recvErr == io.EOF {
-					printTrailer(publishClient.Trailer())
-					shutdownGoroutine(fmt.Errorf("stream closed"))
-					return
-				} else if recvErr != nil {
-					printTrailer(publishClient.Trailer())
-					shutdownGoroutine(recvErr)
-					return
-				}
-
-				results := pubResp.GetResults()
-				if results == nil {
-					shutdownGoroutine(fmt.Errorf("nil results received"))
-					return
-				}
-
-				for _, res := range results {
-					if res.GetError() != nil {
-						shutdownGoroutine(fmt.Errorf(res.GetError().GetMsg()))
-						return
-					}
-				}
-
-				log.Printf("successfully published event")
-			}
-		}
-	}()
-
-	wg.Wait()
-
-	return resErr
-}
-
 // Returns a new context with the necessary authentication parameters for the gRPC server
 func (c *PubSubClient) getAuthContext() context.Context {
 	return metadata.NewOutgoingContext(context.Background(), metadata.Pairs(
@@ -436,35 +257,6 @@ func (c *PubSubClient) getAuthContext() context.Context {
 		instanceHeader, c.instanceURL,
 		tenantHeader, c.orgID,
 	))
-}
-
-// Creates a new connection to the gRPC server and returns the wrapper struct
-func NewGRPCClient() (*PubSubClient, error) {
-	dialOpts := []grpc.DialOption{
-		grpc.WithBlock(),
-	}
-
-	if common.GRPCEndpoint == "localhost:7011" {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	} else {
-		certs := getCerts()
-		creds := credentials.NewClientTLSFromCert(certs, "")
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
-	}
-
-	ctx, cancelFn := context.WithTimeout(context.Background(), common.GRPCDialTimeout)
-	defer cancelFn()
-
-	conn, err := grpc.DialContext(ctx, common.GRPCEndpoint, dialOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return &PubSubClient{
-		conn:         conn,
-		pubSubClient: proto.NewPubSubClient(conn),
-		schemaCache:  make(map[string]*goavro.Codec),
-	}, nil
 }
 
 // Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead

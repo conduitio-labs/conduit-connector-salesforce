@@ -7,14 +7,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/common"
+	"time"
 )
 
 const (
 	loginEndpoint    = "/services/oauth2/token"
 	userInfoEndpoint = "/services/oauth2/userinfo"
 )
+
+var OAuthDialTimeout = 5 * time.Second
 
 type LoginResponse struct {
 	AccessToken string `json:"access_token"`
@@ -30,17 +31,21 @@ type UserInfoResponse struct {
 	OrganizationID string `json:"organization_id"`
 }
 
-func Login() (*LoginResponse, error) {
+type Credentials struct {
+	ClientID, ClientSecret, OAuthEndpoint string
+}
+
+func Login(creds Credentials) (*LoginResponse, error) {
 	body := url.Values{}
 	body.Set("grant_type", "client_credentials")
-	body.Set("client_id", common.ClientId)
-	body.Set("client_secret", common.ClientSecret)
+	body.Set("client_id", creds.ClientID)
+	body.Set("client_secret", creds.ClientSecret)
 
-	ctx, cancelFn := context.WithTimeout(context.Background(), common.OAuthDialTimeout)
+	ctx, cancelFn := context.WithTimeout(context.Background(), OAuthDialTimeout)
 	defer cancelFn()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		common.OAuthEndpoint+"/services/oauth2/token", strings.NewReader(body.Encode()))
+		creds.OAuthEndpoint+"/services/oauth2/token", strings.NewReader(body.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -66,11 +71,11 @@ func Login() (*LoginResponse, error) {
 	return &loginResponse, nil
 }
 
-func UserInfo(accessToken string) (*UserInfoResponse, error) {
-	ctx, cancelFn := context.WithTimeout(context.Background(), common.OAuthDialTimeout)
+func UserInfo(oauthEndpoint, accessToken string) (*UserInfoResponse, error) {
+	ctx, cancelFn := context.WithTimeout(context.Background(), OAuthDialTimeout)
 	defer cancelFn()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, common.OAuthEndpoint+userInfoEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, oauthEndpoint+userInfoEndpoint, nil)
 	if err != nil {
 		return nil, err
 	}
