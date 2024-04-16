@@ -166,7 +166,7 @@ func (c *PubSubClient) Subscribe(
 	initialFetchRequest := &proto.FetchRequest{
 		TopicName:    topicName,
 		ReplayPreset: replayPreset,
-		NumRequested: 5,
+		NumRequested: 1,
 	}
 	if replayPreset == proto.ReplayPreset_CUSTOM && replayId != nil {
 		initialFetchRequest.ReplayId = replayId
@@ -185,40 +185,44 @@ func (c *PubSubClient) Subscribe(
 	return subscribeClient, replayId, nil
 }
 
-func (c *PubSubClient) Recv(subscribeClient proto.PubSub_SubscribeClient, replayId []byte) ([]byte, error) {
+func (c *PubSubClient) Recv(
+	subscribeClient proto.PubSub_SubscribeClient,
+	replayId []byte,
+) ([]map[string]any, []byte, error) {
 	log.Printf("Waiting for events...")
 	resp, err := subscribeClient.Recv()
 	if err == io.EOF {
 		printTrailer(subscribeClient.Trailer())
-		return replayId, fmt.Errorf("stream closed")
+		return nil, replayId, fmt.Errorf("stream closed")
 	} else if err != nil {
 		printTrailer(subscribeClient.Trailer())
-		return replayId, err
+		return nil, replayId, err
 	}
 
+	var requestedEvents []map[string]any
 	for _, event := range resp.Events {
 		codec, err := c.fetchCodec(event.GetEvent().GetSchemaId())
 		if err != nil {
-			return replayId, err
+			return requestedEvents, replayId, err
 		}
 
 		parsed, _, err := codec.NativeFromBinary(event.GetEvent().GetPayload())
 		if err != nil {
-			return replayId, err
+			return requestedEvents, replayId, err
 		}
 
 		body, ok := parsed.(map[string]interface{})
 		if !ok {
-			return replayId, fmt.Errorf("error casting parsed event: %v", body)
+			return requestedEvents, replayId, fmt.Errorf("error casting parsed event: %v", body)
 		}
 
 		// Again, this should be stored in a persistent external datastore instead of a variable
 		replayId = event.GetReplayId()
 
-		log.Printf("event body: %+v\n", body)
+		requestedEvents = append(requestedEvents, body)
 	}
 
-	return replayId, nil
+	return requestedEvents, replayId, nil
 }
 
 // Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache

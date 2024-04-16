@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/proto"
@@ -73,7 +74,6 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	}
 	sdk.Logger(ctx).Info().Msg("successfully authenticated")
 
-
 	err = s.client.FetchUserInfo(s.config.OAuthEndpoint)
 	if err != nil {
 		return fmt.Errorf("could not fetch user info: %w", err)
@@ -90,7 +90,10 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
 	}
 
-	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(s.config.TopicName, proto.ReplayPreset_LATEST, nil)
+	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(
+		s.config.TopicName,
+		proto.ReplayPreset_LATEST,
+		nil)
 	if err != nil {
 		return fmt.Errorf("could not subscribe to topic")
 	}
@@ -100,16 +103,22 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
-	s.currReplayId, err = s.client.Recv(s.subscribeClient, s.currReplayId)
+	recvEvents, currReplayId, err := s.client.Recv(s.subscribeClient, s.currReplayId)
 	if err != nil {
 		return rec, err
+	}
+	s.currReplayId = currReplayId
+
+	bs, err := json.Marshal(map[string]any{"events": recvEvents})
+	if err != nil {
+		return rec, fmt.Errorf("failed to marshal events")
 	}
 
 	var (
 		position sdk.Position
 		metadata sdk.Metadata
-		key      sdk.Data
-		payload  sdk.Data
+		key      sdk.Data = sdk.RawData(currReplayId)
+		payload  sdk.Data = sdk.RawData(bs)
 	)
 
 	rec = sdk.Util.Source.NewRecordCreate(position, metadata, key, payload)
