@@ -157,10 +157,7 @@ func (c *PubSubClient) Subscribe(
 	replayPreset proto.ReplayPreset,
 	replayId []byte,
 ) (proto.PubSub_SubscribeClient, []byte, error) {
-	ctx, cancelFn := context.WithCancel(c.getAuthContext())
-	defer cancelFn()
-
-	subscribeClient, err := c.pubSubClient.Subscribe(ctx)
+	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
 		return nil, replayId, err
 	}

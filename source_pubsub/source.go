@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/common"
 	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/proto"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
@@ -22,10 +21,10 @@ type Config struct {
 	Username string `json:"username" validate:"required"`
 
 	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
-	OAuthEndpoint string `json:"oauth_endpoint" validate:"required"`
+	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
 
 	// TopicName is the topic the source connector will subscribe to
-	TopicName string `json:"topic_name" validate:"required"`
+	TopicName string `json:"topicName" validate:"required"`
 }
 
 type Source struct {
@@ -37,7 +36,7 @@ type Source struct {
 	config          Config
 }
 
-func NewSource() sdk.Source {
+func New() sdk.Source {
 	return sdk.SourceWithMiddleware(&Source{}, sdk.DefaultSourceMiddleware()...)
 }
 
@@ -46,7 +45,7 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 }
 
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
-	if err := sdk.Util.ParseConfig(cfg, s.config); err != nil {
+	if err := sdk.Util.ParseConfig(cfg, &s.config); err != nil {
 		return fmt.Errorf("Failed to parse config")
 	}
 
@@ -72,25 +71,30 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	if err := s.client.Authenticate(creds); err != nil {
 		return fmt.Errorf("could not authenticate: %w", err)
 	}
+	sdk.Logger(ctx).Info().Msg("successfully authenticated")
+
 
 	err = s.client.FetchUserInfo(s.config.OAuthEndpoint)
 	if err != nil {
 		return fmt.Errorf("could not fetch user info: %w", err)
 	}
+	sdk.Logger(ctx).Info().Msg("successfully fetched user info")
 
 	topic, err := s.client.GetTopic(s.config.TopicName)
 	if err != nil {
 		return fmt.Errorf("could not fetch topic: %w", err)
 	}
+	sdk.Logger(ctx).Info().Msgf("successfully got topic %s", topic.TopicName)
 
 	if !topic.GetCanSubscribe() {
-		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", common.TopicName)
+		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
 	}
 
-	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(s.config.TopicName, common.ReplayPreset, nil)
+	s.subscribeClient, s.currReplayId, err = s.client.Subscribe(s.config.TopicName, proto.ReplayPreset_LATEST, nil)
 	if err != nil {
 		return fmt.Errorf("could not subscribe to topic")
 	}
+	sdk.Logger(ctx).Info().Msgf("subscribed to topic %s", topic.TopicName)
 
 	return nil
 }

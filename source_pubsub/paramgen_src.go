@@ -25,17 +25,17 @@ func (Config) Parameters() map[string]sdk.Parameter {
 				sdk.ValidationRequired{},
 			},
 		},
-		"oauth_endpoint": {
+		"oauthEndpoint": {
 			Default:     "",
-			Description: "oauth_endpoint is the oauth_endpoint from the salesforce app",
+			Description: "oauthEndpoint is the oauthEndpoint from the salesforce app",
 			Type:        sdk.ParameterTypeString,
 			Validations: []sdk.Validation{
 				sdk.ValidationRequired{},
 			},
 		},
-		"topic_name": {
+		"topicName": {
 			Default:     "",
-			Description: "topic_name is the topic the source connector will subscribe to",
+			Description: "topicName is the topic the source connector will subscribe to",
 			Type:        sdk.ParameterTypeString,
 			Validations: []sdk.Validation{
 				sdk.ValidationRequired{},
