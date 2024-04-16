@@ -50,7 +50,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 		return fmt.Errorf("Failed to parse config")
 	}
 
-	sdk.Logger(ctx).Info().Msg("successfully parsed source configuration")
+	sdk.Logger(ctx).Info().Msg("parsed source configuration")
 
 	return nil
 }
@@ -61,7 +61,7 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
 
-	sdk.Logger(ctx).Info().Msg("successfully created GRPCClient client")
+	sdk.Logger(ctx).Info().Msg("created GRPCClient")
 
 	creds := Credentials{
 		ClientID:      s.config.ClientID,
@@ -72,19 +72,19 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	if err := s.client.Authenticate(creds); err != nil {
 		return fmt.Errorf("could not authenticate: %w", err)
 	}
-	sdk.Logger(ctx).Info().Msg("successfully authenticated")
+	sdk.Logger(ctx).Info().Msg("authenticated GRPCClient")
 
 	err = s.client.FetchUserInfo(s.config.OAuthEndpoint)
 	if err != nil {
 		return fmt.Errorf("could not fetch user info: %w", err)
 	}
-	sdk.Logger(ctx).Info().Msg("successfully fetched user info")
+	sdk.Logger(ctx).Info().Msg("fetched user info")
 
 	topic, err := s.client.GetTopic(s.config.TopicName)
 	if err != nil {
 		return fmt.Errorf("could not fetch topic: %w", err)
 	}
-	sdk.Logger(ctx).Info().Msgf("successfully got topic %s", topic.TopicName)
+	sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
 
 	if !topic.GetCanSubscribe() {
 		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
