@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub/proto"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
