@@ -18,7 +18,7 @@ func init() {
 
 func main() {
 	ctx := context.Background()
-	s := source.New()
+	s := source.NewSource()
 
 	cfg := map[string]string{
 		"clientID":      os.Getenv("SF_CLIENT_ID"),

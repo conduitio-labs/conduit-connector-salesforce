@@ -59,6 +59,8 @@ func Login(creds Credentials) (*LoginResponse, error) {
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
+		var j map[string]interface{}
+		err = json.NewDecoder(httpResp.Body).Decode(&j)
 		return nil, fmt.Errorf("non-200 status code returned on OAuth authentication call: %v", httpResp.StatusCode)
 	}
 

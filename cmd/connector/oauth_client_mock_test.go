@@ -20,8 +20,7 @@ import (
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth/response"
 )
 
-type oAuthClientMock struct {
-}
+type oAuthClientMock struct{}
 
 func (c *oAuthClientMock) Authenticate(_ context.Context) (response.TokenResponse, error) {
 	return response.TokenResponse{
