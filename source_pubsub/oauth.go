@@ -1,3 +1,17 @@
+// Copyright © 2022 Meroxa, Inc. and Miquido
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package source
 
 import (
@@ -59,15 +73,13 @@ func Login(creds Credentials) (*LoginResponse, error) {
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
-		var j map[string]interface{}
-		err = json.NewDecoder(httpResp.Body).Decode(&j)
 		return nil, fmt.Errorf("non-200 status code returned on OAuth authentication call: %v", httpResp.StatusCode)
 	}
 
 	var loginResponse LoginResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&loginResponse)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error decoding login response - %s", err)
 	}
 
 	return &loginResponse, nil
@@ -79,14 +91,14 @@ func UserInfo(oauthEndpoint, accessToken string) (*UserInfoResponse, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, oauthEndpoint+userInfoEndpoint, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error making user info request - %s", err)
 	}
 
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting user info response - %s", err)
 	}
 
 	defer httpResp.Body.Close()
@@ -98,7 +110,7 @@ func UserInfo(oauthEndpoint, accessToken string) (*UserInfoResponse, error) {
 	var userInfoResponse UserInfoResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&userInfoResponse)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error decoding user info - %s", err)
 	}
 
 	return &userInfoResponse, nil

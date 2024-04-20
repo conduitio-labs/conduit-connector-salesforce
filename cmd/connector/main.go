@@ -16,7 +16,6 @@ package main
 
 import (
 	sf "github.com/conduitio-labs/conduit-connector-salesforce"
-	// sfSource "github.com/conduitio-labs/conduit-connector-salesforce/source"
 	sfSourcePubsub "github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )

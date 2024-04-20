@@ -1,3 +1,17 @@
+// Copyright © 2022 Meroxa, Inc. and Miquido
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package source
 
 import (
@@ -19,9 +33,9 @@ import (
 )
 
 var (
-	// topic and subscription-related variables
+	// topic and subscription-related variables.
 
-	// gRPC server variables
+	// gRPC server variables.
 	GRPCEndpoint    = "api.pubsub.salesforce.com:7443"
 	GRPCDialTimeout = 5 * time.Second
 	GRPCCallTimeout = 5 * time.Second
@@ -44,24 +58,22 @@ type PubSubClient struct {
 	caches chan []ConnectResponseEvent
 	ticker *time.Ticker
 
-	currReplayId []byte
+	currreplayID []byte
 	tomb         *tomb.Tomb
 	topic        string
 }
 
 type ConnectResponseEvent struct {
 	Data     map[string]interface{}
-	ReplayID []byte
+	replayID []byte
 }
 
-type Position struct {
-	ReplayID  []byte
-	TopicName string
-}
-
-// Creates a new connection to the gRPC server and returns the wrapper struct
+// Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
-	fmt.Println("NewGRPCClient - Starting GRPC Client")
+	ctx, cancelFn := context.WithTimeout(context.Background(), GRPCDialTimeout)
+	defer cancelFn()
+
+	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Starting GRPC Client")
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithBlock(),
@@ -75,15 +87,12 @@ func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Positi
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	}
 
-	ctx, cancelFn := context.WithTimeout(context.Background(), GRPCDialTimeout)
-	defer cancelFn()
-
 	conn, err := grpc.DialContext(ctx, GRPCEndpoint, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error on dialing grpc - %s", err)
 	}
 
-	fmt.Println("NewGRPCClient - Initialize Pubsub")
+	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Initialize Pubsub")
 
 	pubSub := &PubSubClient{
 		conn:         conn,
@@ -94,6 +103,7 @@ func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Positi
 		ticker:       time.NewTicker(pollingPeriod),
 		tomb:         &tomb.Tomb{},
 		topic:        config.TopicName,
+		currreplayID: sdkPos,
 	}
 
 	creds := Credentials{
@@ -125,12 +135,12 @@ func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Positi
 	pubSub.tomb.Go(pubSub.startCDC)
 	pubSub.tomb.Go(pubSub.flush)
 
-	fmt.Println("NewGRPCClient - Finished starting GRPC Client")
+	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Finished starting GRPC Client")
 	return pubSub, nil
 }
 
 func (c *PubSubClient) HasNext(_ context.Context) bool {
-	return len(c.buffer) > 0 || !c.tomb.Alive() // if tomb is dead we return true so caller will fetch error with Next
+	return len(c.buffer) > 0 || !c.tomb.Alive() // if tomb is dead we return true so caller will fetch error with Next.
 }
 
 // Next returns the next record from the buffer.
@@ -152,25 +162,24 @@ func (c *PubSubClient) Stop() {
 
 func (c *PubSubClient) startCDC() error {
 	defer close(c.caches)
-	fmt.Println("StartCDC - Starting")
+	sdk.Logger(context.Background()).Debug().Msg("StartCDC - Starting")
 	for {
 		select {
 		case <-c.tomb.Dying():
 			return c.tomb.Err()
-		case <-c.ticker.C: // detect changes every polling period
-			fmt.Println("StartCDC - Begin Receiving Events")
+		case <-c.ticker.C: // detect changes every polling period.
+			sdk.Logger(context.Background()).Debug().Msg("StartCDC - Begin Receiving Events")
 			events, err := c.Recv(c.tomb.Context(nil)) //nolint:staticcheck // SA1012 tomb expects nil
 			if err != nil {
 				return fmt.Errorf("error receiving events - %s", err)
 			}
 
 			select {
-
 			case c.caches <- events:
 				if len(events) != 0 {
-					c.currReplayId = events[len(events)-1].ReplayID
+					c.currreplayID = events[len(events)-1].replayID
 				} else {
-					c.currReplayId = nil
+					c.currreplayID = nil
 				}
 
 			case <-c.tomb.Dying():
@@ -180,24 +189,24 @@ func (c *PubSubClient) startCDC() error {
 	}
 }
 
-func (w *PubSubClient) flush() error {
-	defer close(w.buffer)
+func (c *PubSubClient) flush() error {
+	defer close(c.buffer)
 	for {
 		select {
-		case <-w.tomb.Dying():
-			return w.tomb.Err()
-		case cache := <-w.caches:
+		case <-c.tomb.Dying():
+			return c.tomb.Err()
+		case cache := <-c.caches:
 			for _, entry := range cache {
-				fmt.Println("Flush - Build Record")
-				output, err := w.buildRecord(entry)
+				sdk.Logger(context.Background()).Debug().Msg("Flush - Build Record")
+				output, err := c.buildRecord(entry)
 				if err != nil {
-					return fmt.Errorf("could not build record for %q: %w", entry.ReplayID, err)
+					return fmt.Errorf("could not build record for %q: %w", entry.replayID, err)
 				}
 				select {
-				case w.buffer <- output:
+				case c.buffer <- output:
 					// worked fine
-				case <-w.tomb.Dying():
-					return w.tomb.Err()
+				case <-c.tomb.Dying():
+					return c.tomb.Err()
 				}
 			}
 		}
@@ -205,24 +214,24 @@ func (w *PubSubClient) flush() error {
 }
 
 func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (sdk.Record, error) {
-	// TODO - ADD something here to distinguish creates, deletes, updates
+	// TODO - ADD something here to distinguish creates, deletes, updates.
 	rec := sdk.SourceUtil{}.NewRecordCreate(
-		sdk.Position(event.ReplayID),
+		sdk.Position(event.replayID),
 		sdk.Metadata{},
-		sdk.RawData(event.ReplayID),
+		sdk.RawData(event.replayID),
 		sdk.StructuredData(event.Data),
 	)
 
 	return rec, nil
 }
 
-// Closes the underlying connection to the gRPC server
+// Closes the underlying connection to the gRPC server.
 func (c *PubSubClient) Close() {
 	c.conn.Close()
 }
 
-// Makes a call to the OAuth server to fetch credentials. Credentials are stored as part of the PubSubClient object so that they can be
-// referenced later in other methods
+// Makes a call to the OAuth server to fetch credentials. Credentials are stored as part of the PubSubClient object so that they can be.
+// referenced later in other methods.
 func (c *PubSubClient) Authenticate(creds Credentials) error {
 	resp, err := Login(creds)
 	if err != nil {
@@ -235,8 +244,8 @@ func (c *PubSubClient) Authenticate(creds Credentials) error {
 	return nil
 }
 
-// Makes a call to the OAuth server to fetch user info. User info is stored as part of the PubSubClient object so that it can be referenced
-// later in other methods
+// Makes a call to the OAuth server to fetch user info. User info is stored as part of the PubSubClient object so that it can be referenced.
+// later in other methods.
 func (c *PubSubClient) FetchUserInfo(oauthEndpoint string) error {
 	resp, err := UserInfo(oauthEndpoint, c.accessToken)
 	if err != nil {
@@ -249,7 +258,7 @@ func (c *PubSubClient) FetchUserInfo(oauthEndpoint string) error {
 	return nil
 }
 
-// Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic
+// Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic.
 func (c *PubSubClient) GetTopic(topicName string) (*proto.TopicInfo, error) {
 	var trailer metadata.MD
 
@@ -268,12 +277,12 @@ func (c *PubSubClient) GetTopic(topicName string) (*proto.TopicInfo, error) {
 	return resp, nil
 }
 
-// Wrapper function around the GetSchema RPC. This will add the OAuth credentials and make a call to fetch data about a specific schema
-func (c *PubSubClient) GetSchema(schemaId string) (*proto.SchemaInfo, error) {
+// Wrapper function around the GetSchema RPC. This will add the OAuth credentials and make a call to fetch data about a specific schema.
+func (c *PubSubClient) GetSchema(schemaID string) (*proto.SchemaInfo, error) {
 	var trailer metadata.MD
 
 	req := &proto.SchemaRequest{
-		SchemaId: schemaId,
+		SchemaId: schemaID,
 	}
 
 	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
@@ -287,19 +296,19 @@ func (c *PubSubClient) GetSchema(schemaId string) (*proto.SchemaInfo, error) {
 	return resp, nil
 }
 
-// Wrapper function around the Subscribe RPC. This will add the OAuth credentials and create a separate streaming client that will be used to
-// fetch data from the topic. This method will continuously consume messages unless an error occurs; if an error does occur then this method will
-// return the last successfully consumed ReplayId as well as the error message. If no messages were successfully consumed then this method will return
-// the same ReplayId that it originally received as a parameter
+// Wrapper function around the Subscribe RPC. This will add the OAuth credentials and create a separate streaming client that will be used to,
+// fetch data from the topic. This method will continuously consume messages unless an error occurs; if an error does occur then this method will,
+// return the last successfully consumed replayID as well as the error message. If no messages were successfully consumed then this method will return,
+// the same replayID that it originally received as a parameter.
 func (c *PubSubClient) Subscribe(
 	ctx context.Context,
 	topicName string,
 	replayPreset proto.ReplayPreset,
-	replayId []byte,
+	replayID []byte,
 ) (proto.PubSub_SubscribeClient, []byte, error) {
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
-		return nil, replayId, err
+		return nil, replayID, err
 	}
 
 	initialFetchRequest := &proto.FetchRequest{
@@ -308,47 +317,45 @@ func (c *PubSubClient) Subscribe(
 		NumRequested: 1,
 	}
 
-	if replayPreset == proto.ReplayPreset_CUSTOM && replayId != nil {
-		initialFetchRequest.ReplayId = replayId
+	if replayPreset == proto.ReplayPreset_EARLIEST && replayID != nil {
+		initialFetchRequest.ReplayId = replayID
 	}
 
 	err = subscribeClient.Send(initialFetchRequest)
 	if err == io.EOF {
 		sdk.Logger(ctx).Warn().Msg("EOF error returned from initial Send call, proceeding anyway")
-		return nil, replayId, fmt.Errorf("EOF error on subscribe send - %s", err)
+		return nil, replayID, fmt.Errorf("EOF error on subscribe send - %s", err)
 	} else if err != nil {
-		return nil, replayId, fmt.Errorf("error initial fetch request - %s", err)
+		return nil, replayID, fmt.Errorf("error initial fetch request - %s", err)
 	}
 
-	return subscribeClient, replayId, nil
+	return subscribeClient, replayID, nil
 }
 
 func (c *PubSubClient) Recv(
 	ctx context.Context,
 ) ([]ConnectResponseEvent, error) {
 	var err error
-	if len(c.currReplayId) > 0 {
-		c.subClient, c.currReplayId, err = c.Subscribe(
+	if len(c.currreplayID) > 0 {
+		c.subClient, c.currreplayID, err = c.Subscribe(
 			ctx,
 			c.topic,
 			proto.ReplayPreset_CUSTOM,
-			c.currReplayId)
+			c.currreplayID)
 		if err != nil {
-			fmt.Println(err)
-			return nil, fmt.Errorf("error subscribing to topic on custom replay id %s - %s", c.currReplayId, err)
+			return nil, fmt.Errorf("error subscribing to topic on custom replay id %s - %s", c.currreplayID, err)
 		}
 	} else {
-		c.subClient, c.currReplayId, err = c.Subscribe(
+		c.subClient, c.currreplayID, err = c.Subscribe(
 			ctx,
 			c.topic,
 			proto.ReplayPreset_LATEST,
 			nil)
 		if err != nil {
-			fmt.Println(err)
 			return nil, fmt.Errorf("error subscribing to topic on latest - %s", err)
 		}
 	}
-	fmt.Println("Receive Funk 1 - Waiting for events!")
+	sdk.Logger(ctx).Debug().Msg("Receive Funk 1 - Waiting for events!")
 
 	resp, err := c.subClient.Recv()
 
@@ -359,7 +366,7 @@ func (c *PubSubClient) Recv(
 	}
 
 	var requestedEvents []ConnectResponseEvent
-	fmt.Println("Receive Funk 4 - Receving events!")
+	sdk.Logger(ctx).Debug().Msg("Receive Funk 4 - Receving events!")
 
 	for _, event := range resp.Events {
 		var fetchedEvent ConnectResponseEvent
@@ -379,27 +386,27 @@ func (c *PubSubClient) Recv(
 			return requestedEvents, fmt.Errorf("receive  - error casting parsed event: %v", body)
 		}
 		rID := event.GetReplayId()
-		fetchedEvent.ReplayID = rID
+		fetchedEvent.replayID = rID
 		fetchedEvent.Data = body
 		requestedEvents = append(requestedEvents, fetchedEvent)
 	}
 
-	fmt.Println("Receive Funk 8 - Finished Receive")
+	sdk.Logger(ctx).Debug().Msg("Receive Funk 8 - Finished Receive")
 
 	return requestedEvents, nil
 }
 
-// Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache
-// then a GetSchema call is made and the corresponding codec is cached for future use
-func (c *PubSubClient) fetchCodec(ctx context.Context, schemaId string) (*goavro.Codec, error) {
-	codec, ok := c.schemaCache[schemaId]
+// Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache,
+// then a GetSchema call is made and the corresponding codec is cached for future use.
+func (c *PubSubClient) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
+	codec, ok := c.schemaCache[schemaID]
 	if ok {
 		sdk.Logger(ctx).Trace().Msg("Fetched cached codec...")
 		return codec, nil
 	}
 
 	sdk.Logger(ctx).Trace().Msg("Making GetSchema request for uncached schema...")
-	schema, err := c.GetSchema(schemaId)
+	schema, err := c.GetSchema(schemaID)
 	if err != nil {
 		return nil, fmt.Errorf("error making getschema request for uncached schema - %s", err)
 	}
@@ -410,7 +417,7 @@ func (c *PubSubClient) fetchCodec(ctx context.Context, schemaId string) (*goavro
 		return nil, fmt.Errorf("error creating codec from uncached schema - %s", err)
 	}
 
-	c.schemaCache[schemaId] = codec
+	c.schemaCache[schemaID] = codec
 
 	return codec, nil
 }
@@ -421,7 +428,7 @@ const (
 	tenantHeader   = "tenantid"
 )
 
-// Returns a new context with the necessary authentication parameters for the gRPC server
+// Returns a new context with the necessary authentication parameters for the gRPC server.
 func (c *PubSubClient) getAuthContext() context.Context {
 	pairs := metadata.Pairs(
 		tokenHeader, c.accessToken,
@@ -432,7 +439,7 @@ func (c *PubSubClient) getAuthContext() context.Context {
 	return metadata.NewOutgoingContext(context.Background(), pairs)
 }
 
-// Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead
+// Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead.
 func getCerts() *x509.CertPool {
 	if certs, err := x509.SystemCertPool(); err == nil {
 		return certs
