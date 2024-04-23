@@ -24,7 +24,7 @@ import (
 func TestFailureResponseError_Error(t *testing.T) {
 	fakerInstance := faker.New()
 
-	var errorContents = fakerInstance.Lorem().Sentence(6)
+	errorContents := fakerInstance.Lorem().Sentence(6)
 
 	failureResponseError := FailureResponseError{
 		ErrorName:        fakerInstance.Lorem().Sentence(3),

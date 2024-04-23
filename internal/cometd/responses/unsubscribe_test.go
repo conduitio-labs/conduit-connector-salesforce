@@ -26,7 +26,7 @@ func TestUnsubscribeResponse_GetSubscriptions(t *testing.T) {
 	fakerInstance := faker.New()
 
 	t.Run("panics when unsupported type is provided", func(t *testing.T) {
-		var subscription = fakerInstance.Int()
+		subscription := fakerInstance.Int()
 
 		response := UnsubscribeResponse{
 			Subscription: subscription,
@@ -38,7 +38,7 @@ func TestUnsubscribeResponse_GetSubscriptions(t *testing.T) {
 	})
 
 	t.Run("slice with one element is returned when Subscription is string", func(t *testing.T) {
-		var subscription = fakerInstance.Lorem().Sentence(3)
+		subscription := fakerInstance.Lorem().Sentence(3)
 
 		response := UnsubscribeResponse{
 			Subscription: subscription,
@@ -51,7 +51,7 @@ func TestUnsubscribeResponse_GetSubscriptions(t *testing.T) {
 	})
 
 	t.Run("slice with all elements is returned when Subscription is slice", func(t *testing.T) {
-		var subscription = []string{
+		subscription := []string{
 			fakerInstance.Lorem().Sentence(3),
 			fakerInstance.Lorem().Sentence(4),
 			fakerInstance.Lorem().Sentence(5),

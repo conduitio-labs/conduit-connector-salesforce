@@ -31,8 +31,10 @@ import (
 
 const sfCometDVersion = "54.0"
 
-var OAuthClientFactory = oauth.NewDefaultClient
-var StreamingClientFactory = cometd.NewDefaultClient
+var (
+	OAuthClientFactory     = oauth.NewDefaultClient
+	StreamingClientFactory = cometd.NewDefaultClient
+)
 
 var ErrConnectorIsStopped = errors.New("connector is stopped")
 
@@ -98,6 +100,7 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 		},
 	}
 }
+
 func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err error) {
 	s.config, err = ParseConfig(cfgRaw)
 	if err != nil {
