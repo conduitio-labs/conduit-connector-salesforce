@@ -50,7 +50,7 @@ const (
 	ConfigKeyKeyField      = "keyField"
 	ConfigKeyObjectName    = "objectName"
 	ConfigKeyInstanceURL   = "instanceURL"
-	ConfigKeyHardDelete = "hardDelete"
+	ConfigKeyHardDelete    = "hardDelete"
 )
 
 type Config struct {
@@ -64,7 +64,7 @@ type Config struct {
 	KeyField        string
 	ObjectName      string
 	InstanceURL     string
-	HardDelete bool
+	HardDelete      bool
 }
 
 // NewDestination creates the Destination and wraps it in the default middleware.
@@ -179,13 +179,22 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 		// set ExternalIDField & ExternalID
 		keyStr := fmt.Sprint(keyData[d.Config.KeyField])
 
+		idField := strings.ToUpper(d.Config.KeyField)
+		if !strings.HasSuffix(idField, "__c") {
+			idField = fmt.Sprintf("%s__c", idField)
+		}
+
 		switch r.Operation {
 		case sdk.OperationUpdate, sdk.OperationDelete:
 			// fetch sfObj by key
+			objectName := d.Config.ObjectName
+			if !strings.HasSuffix(objectName, "__c") {
+				objectName = fmt.Sprintf("%s__c", objectName)
+			}
 			q := fmt.Sprintf(
-				"SELECT FIELDS(ALL) FROM %s WHERE %s__c = '%s' LIMIT 1", 
-				d.Config.ObjectName, 
-				d.Config.KeyField,
+				"SELECT FIELDS(ALL) FROM %s WHERE %s = '%s' LIMIT 1",
+				d.Config.ObjectName,
+				idField,
 				keyStr,
 			)
 			result, err := d.client.Query(q)
@@ -196,12 +205,11 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 			if len(result.Records) != 1 {
 				return 0, errors.Errorf("unexpected number of matched records from salesforce: %w", err)
 			}
-			
+
 			// set salesforce ID, needed for updates & deletes.
 			sfObj = sfObj.Set("Id", result.Records[0].ID())
 		}
 
-		idField := fmt.Sprintf("%s__c", strings.ToUpper(d.Config.KeyField))
 		sfObj = sfObj.Set("ExternalIDField", idField)
 		sfObj = sfObj.Set(idField, keyStr)
 
@@ -210,14 +218,18 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 			if err := unmarshal(r.Payload.After, &payloadData); err != nil {
 				return 0, errors.Errorf("cannot extract data from payload.After: %w", err)
 			}
-			
+
 			// Set data fields
 			for k, v := range payloadData {
 				// we already set the key above
 				if k == d.Config.KeyField {
 					continue
 				}
-				sfObj = sfObj.Set(fmt.Sprintf("%s__c", k), v)
+				key := k
+				if !strings.HasSuffix(key, "__c") {
+					key = fmt.Sprintf("%s__c", key)
+				}
+				sfObj = sfObj.Set(key, v)
 			}
 		}
 
