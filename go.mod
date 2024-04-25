@@ -1,7 +1,6 @@
 module github.com/conduitio-labs/conduit-connector-salesforce
 
-go 1.21
-toolchain go1.22.2
+go 1.22.2
 
 require (
 	github.com/conduitio/conduit-connector-sdk v0.9.1
