@@ -90,6 +90,7 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("error receiving new events - %s", err)
 	}
+	sdk.Logger(ctx).Debug().Msgf("read event: %+v", r)
 	return r, nil
 }
 

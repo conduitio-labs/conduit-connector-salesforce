@@ -17,6 +17,7 @@ package source
 import (
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -52,7 +53,8 @@ type PubSubClient struct {
 	pubSubClient proto.PubSubClient
 	subClient    proto.PubSub_SubscribeClient
 
-	schemaCache map[string]*goavro.Codec
+	codecCache map[string]*goavro.Codec
+	unionFields map[string]map[string]struct{}
 
 	buffer chan sdk.Record
 	caches chan []ConnectResponseEvent
@@ -97,7 +99,8 @@ func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Positi
 	pubSub := &PubSubClient{
 		conn:         conn,
 		pubSubClient: proto.NewPubSubClient(conn),
-		schemaCache:  make(map[string]*goavro.Codec),
+		codecCache:  make(map[string]*goavro.Codec),
+		unionFields: make(map[string]map[string]struct{}),
 		buffer:       make(chan sdk.Record, 1),
 		caches:       make(chan []ConnectResponseEvent),
 		ticker:       time.NewTicker(pollingPeriod),
@@ -306,6 +309,9 @@ func (c *PubSubClient) Subscribe(
 	replayPreset proto.ReplayPreset,
 	replayID []byte,
 ) (proto.PubSub_SubscribeClient, []byte, error) {
+	sdk.Logger(ctx).Trace().Msgf("replayID: %s", string(replayID))
+	sdk.Logger(ctx).Trace().Msgf("replayPreset: %s", proto.ReplayPreset_name[int32(replayPreset)])
+	sdk.Logger(ctx).Trace().Msgf("topicName: %s", topicName)
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
 		return nil, replayID, err
@@ -317,7 +323,7 @@ func (c *PubSubClient) Subscribe(
 		NumRequested: 1,
 	}
 
-	if replayPreset == proto.ReplayPreset_EARLIEST && replayID != nil {
+	if replayPreset == proto.ReplayPreset_CUSTOM && replayID != nil {
 		initialFetchRequest.ReplayId = replayID
 	}
 
@@ -381,10 +387,12 @@ func (c *PubSubClient) Recv(
 			return requestedEvents, err
 		}
 
-		body, ok := parsed.(map[string]interface{})
+		payload, ok := parsed.(map[string]interface{})
 		if !ok {
-			return requestedEvents, fmt.Errorf("receive  - error casting parsed event: %v", body)
+			return requestedEvents, fmt.Errorf("receive  - error casting parsed event: %v", payload)
 		}
+
+		body := flattenUnionFields(ctx, payload, c.unionFields[getEvent.SchemaId])
 		rID := event.GetReplayId()
 		fetchedEvent.replayID = rID
 		fetchedEvent.Data = body
@@ -399,7 +407,7 @@ func (c *PubSubClient) Recv(
 // Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache,
 // then a GetSchema call is made and the corresponding codec is cached for future use.
 func (c *PubSubClient) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
-	codec, ok := c.schemaCache[schemaID]
+	codec, ok := c.codecCache[schemaID]
 	if ok {
 		sdk.Logger(ctx).Trace().Msg("Fetched cached codec...")
 		return codec, nil
@@ -412,12 +420,20 @@ func (c *PubSubClient) fetchCodec(ctx context.Context, schemaID string) (*goavro
 	}
 
 	sdk.Logger(ctx).Trace().Msg("Creating codec from uncached schema...")
-	codec, err = goavro.NewCodec(schema.GetSchemaJson())
+	schemaJSON := schema.GetSchemaJson()
+	codec, err = goavro.NewCodec(schemaJSON)
 	if err != nil {
 		return nil, fmt.Errorf("error creating codec from uncached schema - %s", err)
 	}
 
-	c.schemaCache[schemaID] = codec
+	c.codecCache[schemaID] = codec
+
+	unionFields, err := parseUnionFields(ctx, schemaJSON)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing union fields from schema: %w", err)
+	}
+
+	c.unionFields[schemaID] = unionFields
 
 	return codec, nil
 }
@@ -446,4 +462,45 @@ func getCerts() *x509.CertPool {
 	}
 
 	return x509.NewCertPool()
+}
+
+// parseUnionFields parses the schema JSON to identify avro union fields
+func parseUnionFields(ctx context.Context, schemaJSON string) (map[string]struct{}, error) {
+	var schema map[string]interface{}
+	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
+		return nil, fmt.Errorf("Failed to parse schema: %w", err)
+	}
+
+	unionFields := make(map[string]struct{})
+	fields := schema["fields"].([]interface{})
+	for _, field := range fields {
+		f := field.(map[string]interface{})
+		fieldType := f["type"]
+		if types, ok := fieldType.([]interface{}); ok && len(types) > 1 {
+			unionFields[f["name"].(string)] = struct{}{}
+		}
+	}
+	return unionFields, nil
+}
+
+// flattenUnionFields flattens union fields decoded from Avro
+func flattenUnionFields(ctx context.Context, data map[string]interface{}, unionFields map[string]struct{}) map[string]interface{} {
+	flatData := make(map[string]interface{})
+	for key, value := range data {
+		if _, ok := unionFields[key]; ok { // Check if this field is a union
+			if valueMap, ok := value.(map[string]interface{}); ok && len(valueMap) == 1 {
+				for _, actualValue := range valueMap {
+					flatData[key] = actualValue
+					break
+				}
+			} else {
+				flatData[key] = value
+			}
+		} else {
+			flatData[key] = value
+		}
+	}
+
+
+	return flatData
 }
