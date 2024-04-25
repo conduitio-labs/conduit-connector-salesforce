@@ -306,6 +306,9 @@ func (c *PubSubClient) Subscribe(
 	replayPreset proto.ReplayPreset,
 	replayID []byte,
 ) (proto.PubSub_SubscribeClient, []byte, error) {
+	sdk.Logger(ctx).Trace().Msgf("replayID: %s", string(replayID))
+	sdk.Logger(ctx).Trace().Msgf("replayPreset: %s", proto.ReplayPreset_name[int32(replayPreset)])
+	sdk.Logger(ctx).Trace().Msgf("topicName: %s", topicName)
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
 		return nil, replayID, err
@@ -317,7 +320,7 @@ func (c *PubSubClient) Subscribe(
 		NumRequested: 1,
 	}
 
-	if replayPreset == proto.ReplayPreset_EARLIEST && replayID != nil {
+	if replayPreset == proto.ReplayPreset_CUSTOM && replayID != nil {
 		initialFetchRequest.ReplayId = replayID
 	}
 
