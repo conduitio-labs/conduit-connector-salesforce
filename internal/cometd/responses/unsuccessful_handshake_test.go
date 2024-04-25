@@ -25,7 +25,7 @@ func TestUnsuccessfulHandshakeResponseError_Error(t *testing.T) {
 	fakerInstance := faker.New()
 
 	t.Run("test", func(t *testing.T) {
-		var errorDetails = fakerInstance.Lorem().Sentence(6)
+		errorDetails := fakerInstance.Lorem().Sentence(6)
 
 		response := UnsuccessfulHandshakeResponseError{ErrorDetails: errorDetails}
 

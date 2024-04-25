@@ -44,7 +44,7 @@ func TestDecodeHTTPResponse(t *testing.T) {
 	})
 
 	t.Run("fails to read data when reader could not be initialized", func(t *testing.T) {
-		var errorText = fakerInstance.Lorem().Sentence(6)
+		errorText := fakerInstance.Lorem().Sentence(6)
 
 		response := &http.Response{
 			Body: io.NopCloser(&invalidReader{text: errorText}),
@@ -60,7 +60,7 @@ func TestDecodeHTTPResponse(t *testing.T) {
 	})
 
 	t.Run("fails to decompress data when reader could not be initialized", func(t *testing.T) {
-		var errorText = fakerInstance.Lorem().Sentence(6)
+		errorText := fakerInstance.Lorem().Sentence(6)
 
 		response := &http.Response{
 			Body: io.NopCloser(&invalidReader{text: errorText}),
@@ -76,7 +76,7 @@ func TestDecodeHTTPResponse(t *testing.T) {
 	})
 
 	t.Run("returns raw body when no encoding is specified", func(t *testing.T) {
-		var bodyValue = fakerInstance.Lorem().Bytes(16)
+		bodyValue := fakerInstance.Lorem().Bytes(16)
 
 		response := &http.Response{
 			Body: io.NopCloser(bytes.NewReader(bodyValue)),
@@ -93,7 +93,7 @@ func TestDecodeHTTPResponse(t *testing.T) {
 
 	t.Run("decompresses and returns body when gzip encoding is specified", func(t *testing.T) {
 		var buff bytes.Buffer
-		var bodyValue = fakerInstance.Lorem().Bytes(16)
+		bodyValue := fakerInstance.Lorem().Bytes(16)
 
 		gz, err := gzip.NewWriterLevel(&buff, gzip.BestSpeed)
 		require.NoError(t, err)

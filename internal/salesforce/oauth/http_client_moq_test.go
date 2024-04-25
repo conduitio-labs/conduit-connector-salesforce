@@ -14,19 +14,19 @@ var _ httpClient = &httpClientMock{}
 
 // httpClientMock is a mock implementation of httpClient.
 //
-// 	func TestSomethingThatUseshttpClient(t *testing.T) {
+//	func TestSomethingThatUseshttpClient(t *testing.T) {
 //
-// 		// make and configure a mocked httpClient
-// 		mockedhttpClient := &httpClientMock{
-// 			DoFunc: func(req *http.Request) (*http.Response, error) {
-// 				panic("mock out the Do method")
-// 			},
-// 		}
+//		// make and configure a mocked httpClient
+//		mockedhttpClient := &httpClientMock{
+//			DoFunc: func(req *http.Request) (*http.Response, error) {
+//				panic("mock out the Do method")
+//			},
+//		}
 //
-// 		// use mockedhttpClient in code that requires httpClient
-// 		// and then make assertions.
+//		// use mockedhttpClient in code that requires httpClient
+//		// and then make assertions.
 //
-// 	}
+//	}
 type httpClientMock struct {
 	// DoFunc mocks the Do method.
 	DoFunc func(req *http.Request) (*http.Response, error)
@@ -60,7 +60,8 @@ func (mock *httpClientMock) Do(req *http.Request) (*http.Response, error) {
 
 // DoCalls gets all the calls that were made to Do.
 // Check the length with:
-//     len(mockedhttpClient.DoCalls())
+//
+//	len(mockedhttpClient.DoCalls())
 func (mock *httpClientMock) DoCalls() []struct {
 	Req *http.Request
 } {
