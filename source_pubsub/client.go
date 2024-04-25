@@ -67,6 +67,7 @@ type PubSubClient struct {
 
 type ConnectResponseEvent struct {
 	Data     map[string]interface{}
+	eventID  string
 	replayID []byte
 }
 
@@ -221,7 +222,10 @@ func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (sdk.Record, erro
 	rec := sdk.SourceUtil{}.NewRecordCreate(
 		sdk.Position(event.replayID),
 		sdk.Metadata{},
-		sdk.RawData(event.replayID),
+		sdk.StructuredData{
+			"replayId": event.replayID,
+			"id": event.eventID,
+		},
 		sdk.StructuredData(event.Data),
 	)
 
@@ -395,6 +399,7 @@ func (c *PubSubClient) Recv(
 		body := flattenUnionFields(ctx, payload, c.unionFields[getEvent.SchemaId])
 		rID := event.GetReplayId()
 		fetchedEvent.replayID = rID
+		fetchedEvent.eventID = event.Event.Id
 		fetchedEvent.Data = body
 		requestedEvents = append(requestedEvents, fetchedEvent)
 	}
