@@ -156,12 +156,11 @@ func (d *Destination) Open(ctx context.Context) error {
 		return errors.New("Unable to create Salesforce client")
 	}
 	
-
+	d.client = client
+	
 	if err := d.login(); err != nil {
 		return errors.Errorf("Unable to login to Salesforce: %w", err)
 	}
-
-	d.client = client
 	return nil
 }
 
