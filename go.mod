@@ -9,7 +9,7 @@ require (
 	github.com/go-errors/errors v1.5.1
 	github.com/golangci/golangci-lint v1.57.2
 	github.com/jaswdr/faker v1.19.1
-	github.com/simpleforce/simpleforce v0.0.0-20220429021116-acf4ac67ef68
+	github.com/meroxa/simpleforce v0.0.0-20240509212918-2b33dd3fd553
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/net v0.23.0
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
