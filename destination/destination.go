@@ -23,13 +23,12 @@ import (
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
-	"github.com/simpleforce/simpleforce"
+	"github.com/meroxa/simpleforce"
 )
 
 const (
 	defaultBatchDelay = time.Second * 5
 	defaultBatchSize  = 1000
-	keepAliveParam    = "CLIENT_SESSION_KEEP_ALIVE"
 )
 
 type Destination struct {
@@ -156,9 +155,9 @@ func (d *Destination) Open(ctx context.Context) error {
 	if client == nil {
 		return errors.New("Unable to create Salesforce client")
 	}
+	
 
-	err := client.LoginPassword(d.Config.Username, d.Config.Password, d.Config.SecurityToken)
-	if err != nil {
+	if err := d.login(); err != nil {
 		return errors.Errorf("Unable to login to Salesforce: %w", err)
 	}
 
@@ -236,7 +235,9 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 		switch r.Operation {
 		case sdk.OperationSnapshot, sdk.OperationCreate, sdk.OperationUpdate:
 			sfObj = sfObj.Set("updated_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
-			sfObj = sfObj.Upsert()
+			if err := d.handleSobjectErr(sfObj.Upsert); err != nil {
+				return 0, err
+			}
 		case sdk.OperationDelete:
 			if d.Config.HardDelete {
 				if err := sfObj.Delete(); err != nil {
@@ -244,7 +245,9 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 				}
 			} else {
 				sfObj = sfObj.Set("deleted_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
-				sfObj = sfObj.Upsert()
+				if err := d.handleSobjectErr(sfObj.Upsert); err != nil {
+					return 0, err
+				}
 			}
 		}
 	}
@@ -269,5 +272,25 @@ func unmarshal(d sdk.Data, m *map[string]interface{}) error {
 		errors.New("cannot unmarshal JSON")
 	}
 
+	return nil
+}
+
+func (d *Destination) login() error {
+	return d.client.LoginPassword(d.Config.Username, d.Config.Password, d.Config.SecurityToken)
+}
+
+func (d *Destination) handleSobjectErr(f func() error) error {
+	if err := f(); err != nil {
+		if strings.Contains(err.Error(), "INVALID_SESSION_ID") {
+			// login again
+			if loginErr := d.login(); loginErr != nil {
+				return loginErr
+			}
+
+			// retry again, and return error if it fails back-to-back
+			return f()
+		}
+		return err
+	}
 	return nil
 }

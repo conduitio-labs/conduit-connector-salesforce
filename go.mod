@@ -10,7 +10,7 @@ require (
 	github.com/golangci/golangci-lint v1.57.2
 	github.com/jaswdr/faker v1.19.1
 	github.com/linkedin/goavro/v2 v2.12.0
-	github.com/simpleforce/simpleforce v0.0.0-20220429021116-acf4ac67ef68
+	github.com/meroxa/simpleforce v0.0.0-20240509212918-2b33dd3fd553
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/net v0.24.0
 	google.golang.org/grpc v1.59.0
