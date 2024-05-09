@@ -158,7 +158,7 @@ func (d *Destination) Open(ctx context.Context) error {
 	
 	d.client = client
 	
-	if err := d.login(); err != nil {
+	if err := d.login(ctx); err != nil {
 		return errors.Errorf("Unable to login to Salesforce: %w", err)
 	}
 	return nil
@@ -234,7 +234,7 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 		switch r.Operation {
 		case sdk.OperationSnapshot, sdk.OperationCreate, sdk.OperationUpdate:
 			sfObj = sfObj.Set("updated_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
-			if err := d.handleSobjectErr(sfObj.Upsert); err != nil {
+			if err := d.handleSobjectErr(ctx, sfObj.Upsert); err != nil {
 				return 0, err
 			}
 		case sdk.OperationDelete:
@@ -244,7 +244,7 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 				}
 			} else {
 				sfObj = sfObj.Set("deleted_at__c", time.Now().UTC().Format("2006/01/02 03:04:05"))
-				if err := d.handleSobjectErr(sfObj.Upsert); err != nil {
+				if err := d.handleSobjectErr(ctx, sfObj.Upsert); err != nil {
 					return 0, err
 				}
 			}
@@ -274,21 +274,27 @@ func unmarshal(d sdk.Data, m *map[string]interface{}) error {
 	return nil
 }
 
-func (d *Destination) login() error {
-	return d.client.LoginPassword(d.Config.Username, d.Config.Password, d.Config.SecurityToken)
+func (d *Destination) login(ctx context.Context) error {
+	if err := d.client.LoginPassword(d.Config.Username, d.Config.Password, d.Config.SecurityToken); err != nil {
+		return err
+	}
+	sdk.Logger(ctx).Info().Msg("Logged into Salesforce succcessfully.")
+	return nil
 }
 
-func (d *Destination) handleSobjectErr(f func() error) error {
+func (d *Destination) handleSobjectErr(ctx context.Context, f func() error) error {
 	if err := f(); err != nil {
 		if strings.Contains(err.Error(), "INVALID_SESSION_ID") {
+			sdk.Logger(ctx).Info().Msg("error: INVALID_SESSION_ID, attempting to log in again.")
 			// login again
-			if loginErr := d.login(); loginErr != nil {
+			if loginErr := d.login(ctx); loginErr != nil {
 				return loginErr
 			}
 
 			// retry again, and return error if it fails back-to-back
 			return f()
 		}
+		sdk.Logger(ctx).Err(err)
 		return err
 	}
 	return nil
