@@ -32,9 +32,6 @@ type Config struct {
 	// ClientSecret is the client secret from the salesforce app
 	ClientSecret string `json:"clientSecret" validate:"required"`
 
-	// Username is the client secret from the salesforce app
-	Username string `json:"username" validate:"required"`
-
 	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
 	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
 
