@@ -32,17 +32,21 @@ const (
 var OAuthDialTimeout = 5 * time.Second
 
 type LoginResponse struct {
-	AccessToken string `json:"access_token"`
-	InstanceURL string `json:"instance_url"`
-	ID          string `json:"id"`
-	TokenType   string `json:"token_type"`
-	IssuedAt    string `json:"issued_at"`
-	Signature   string `json:"signature"`
+	AccessToken      string `json:"access_token"`
+	InstanceURL      string `json:"instance_url"`
+	ID               string `json:"id"`
+	TokenType        string `json:"token_type"`
+	IssuedAt         string `json:"issued_at"`
+	Signature        string `json:"signature"`
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
 }
 
 type UserInfoResponse struct {
-	UserID         string `json:"user_id"`
-	OrganizationID string `json:"organization_id"`
+	UserID           string `json:"user_id"`
+	OrganizationID   string `json:"organization_id"`
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
 }
 
 type Credentials struct {
@@ -72,14 +76,19 @@ func Login(creds Credentials) (*LoginResponse, error) {
 	}
 	defer httpResp.Body.Close()
 
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("non-200 status code returned on OAuth authentication call: %v", httpResp.StatusCode)
-	}
-
 	var loginResponse LoginResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&loginResponse)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding login response - %s", err)
+	}
+
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf(
+			"non-200 status code returned on OAuth authentication call code=%v, error=%v, error_description=%v",
+			httpResp.StatusCode,
+			loginResponse.Error,
+			loginResponse.ErrorDescription,
+		)
 	}
 
 	return &loginResponse, nil
@@ -103,14 +112,18 @@ func UserInfo(oauthEndpoint, accessToken string) (*UserInfoResponse, error) {
 
 	defer httpResp.Body.Close()
 
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("non-200 status code returned on OAuth user info call: %v", httpResp.StatusCode)
-	}
-
 	var userInfoResponse UserInfoResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&userInfoResponse)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding user info - %s", err)
+	}
+
+	if httpResp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("non-200 status code returned on OAuth user info call: code=%v, error=%v, error_description=%v",
+			httpResp.StatusCode,
+			userInfoResponse.Error,
+			userInfoResponse.ErrorDescription,
+		)
 	}
 
 	return &userInfoResponse, nil
