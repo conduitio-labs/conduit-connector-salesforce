@@ -43,11 +43,9 @@ func (Config) Parameters() map[string]sdk.Parameter {
 		},
 		"username": {
 			Default:     "",
-			Description: "username is the client secret from the salesforce app",
+			Description: "Deprecated: username is the client secret from the salesforce app.",
 			Type:        sdk.ParameterTypeString,
-			Validations: []sdk.Validation{
-				sdk.ValidationRequired{},
-			},
+			Validations: []sdk.Validation{},
 		},
 	}
 }

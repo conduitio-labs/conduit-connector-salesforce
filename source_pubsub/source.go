@@ -17,6 +17,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
@@ -24,6 +25,7 @@ import (
 )
 
 //go:generate paramgen -output=paramgen_src.go Config
+//go:generate mockery --name=client --inpackage
 
 type Config struct {
 	// ClientID is the client id from the salesforce app
@@ -37,14 +39,26 @@ type Config struct {
 
 	// TopicName is the topic the source connector will subscribe to
 	TopicName string `json:"topicName" validate:"required"`
+
+	// Deprecated: Username is the client secret from the salesforce app.
+	Username string `json:"username"`
 }
 
 type Source struct {
 	sdk.UnimplementedSource
 
-	client          *PubSubClient
+	client          client
 	subscribeClient proto.PubSub_SubscribeClient
 	config          Config
+}
+
+type client interface {
+	HasNext(_ context.Context) bool
+	Next(ctx context.Context) (sdk.Record, error)
+	Stop()
+	Initialize(ctx context.Context, config Config) error
+	ReplayID() []byte
+	Close()
 }
 
 func NewSource() sdk.Source {
@@ -68,7 +82,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
 	sdk.Logger(ctx).Debug().Msg("Open - Open Connector")
 
-	s.client, err = NewGRPCClient(time.Duration(2), s.config, sdkPos)
+	s.client, err = NewGRPCClient(ctx, time.Duration(2), s.config, sdkPos)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
@@ -84,6 +98,17 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	}
 	sdk.Logger(ctx).Debug().Msg("Read - Getting next event.")
 	r, err := s.client.Next(ctx)
+	if err != nil && (
+		strings.Contains(err.Error(), "upstream connect error") ||
+		strings.Contains(err.Error(), "disconnect")) {
+		sdk.Logger(ctx).Debug().Msgf("Connection terminated - trying to authenticate again: %s", err)
+		if err = s.reconnect(ctx); err != nil {
+			return sdk.Record{}, fmt.Errorf("error reinitializing client - %s", err)
+		}
+
+		sdk.Logger(ctx).Debug().Msg("Successfully re-authenticated.")
+		r, err = s.client.Next(ctx)
+	}
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("error receiving new events - %s", err)
 	}
@@ -93,6 +118,14 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 
 func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 	sdk.Logger(ctx).Debug().Str("position", string(position)).Msg("got ack")
+	return nil
+}
+
+func (s *Source) reconnect(ctx context.Context) error {
+	if err := s.client.Initialize(ctx, s.config); err != nil {
+		return err
+	}
+
 	return nil
 }
 

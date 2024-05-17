@@ -72,7 +72,7 @@ type ConnectResponseEvent struct {
 }
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
-func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
+func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
 	ctx, cancelFn := context.WithTimeout(context.Background(), GRPCDialTimeout)
 	defer cancelFn()
 
@@ -110,34 +110,9 @@ func NewGRPCClient(pollingPeriod time.Duration, config Config, sdkPos sdk.Positi
 		currreplayID: sdkPos,
 	}
 
-	creds := Credentials{
-		ClientID:      config.ClientID,
-		ClientSecret:  config.ClientSecret,
-		OAuthEndpoint: config.OAuthEndpoint,
+	if err := pubSub.Initialize(ctx, config); err != nil {
+		return nil, fmt.Errorf("could not initialize pubsub client - %s", err)
 	}
-
-	if err := pubSub.Authenticate(creds); err != nil {
-		return nil, fmt.Errorf("could not authenticate: %w", err)
-	}
-
-	err = pubSub.FetchUserInfo(config.OAuthEndpoint)
-	if err != nil {
-		return nil, fmt.Errorf("could not fetch user info: %w", err)
-	}
-	sdk.Logger(ctx).Info().Msg("fetched user info")
-
-	topic, err := pubSub.GetTopic(config.TopicName)
-	if err != nil {
-		return nil, fmt.Errorf("could not fetch topic: %w", err)
-	}
-	sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
-
-	if !topic.GetCanSubscribe() {
-		return nil, fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
-	}
-
-	pubSub.tomb.Go(pubSub.startCDC)
-	pubSub.tomb.Go(pubSub.flush)
 
 	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Finished starting GRPC Client")
 	return pubSub, nil
@@ -162,6 +137,10 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 func (c *PubSubClient) Stop() {
 	c.ticker.Stop()
 	c.tomb.Kill(errors.New("cdc iterator is stopped"))
+}
+
+func (c *PubSubClient) ReplayID() []byte {
+	return c.currreplayID
 }
 
 func (c *PubSubClient) startCDC() error {
@@ -235,6 +214,39 @@ func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (sdk.Record, erro
 // Closes the underlying connection to the gRPC server.
 func (c *PubSubClient) Close() {
 	c.conn.Close()
+}
+
+// Initializes the pubsub client by authenticating and 
+func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
+	creds := Credentials{
+		ClientID:      config.ClientID,
+		ClientSecret:  config.ClientSecret,
+		OAuthEndpoint: config.OAuthEndpoint,
+	}
+
+	if err := c.Authenticate(creds); err != nil {
+		return fmt.Errorf("could not authenticate: %w", err)
+	}
+
+	if err := c.FetchUserInfo(config.OAuthEndpoint); err != nil {
+		return fmt.Errorf("could not fetch user info: %w", err)
+	}
+	sdk.Logger(ctx).Info().Msg("fetched user info")
+
+	topic, err := c.GetTopic(config.TopicName)
+	if err != nil {
+		return fmt.Errorf("could not fetch topic: %w", err)
+	}
+	sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
+
+	if !topic.GetCanSubscribe() {
+		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
+	}
+
+	c.tomb.Go(c.startCDC)
+	c.tomb.Go(c.flush)
+
+	return nil
 }
 
 // Makes a call to the OAuth server to fetch credentials. Credentials are stored as part of the PubSubClient object so that they can be.
