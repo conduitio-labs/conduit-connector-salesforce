@@ -113,6 +113,17 @@ func Test_Read(t *testing.T) {
 			},
 			expectedErr: errors.New("error receiving new events - test error"),
 		},
+		{
+			desc: "error - record with empty payload",
+			config: testConfig,
+			mockClient: func() *mockClient{
+				m := newMockClient(t)
+				m.On("HasNext", mock.Anything).Return(true).Times(1)
+				m.On("Next", mock.Anything).Return(sdk.Record{Payload: sdk.Change{Before: nil, After: nil}}, nil).Times(1)
+				return m
+			},
+			expectedErr: sdk.ErrBackoffRetry,
+		},
 	}
 
 	for _, tc := range testCases {
