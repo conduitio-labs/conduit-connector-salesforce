@@ -114,6 +114,12 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 		return sdk.Record{}, fmt.Errorf("error receiving new events - %s", err)
 	}
 	sdk.Logger(ctx).Debug().Msgf("read event: %+v", r)
+
+	// filter out empty record payloads
+	if (r.Payload.Before == nil && r.Payload.After == nil) {
+		sdk.Logger(ctx).Error().Msgf("empty record payload detected. backing off to retry: %+v", r)
+		return sdk.Record{}, sdk.ErrBackoffRetry
+	}
 	return r, nil
 }
 
