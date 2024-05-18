@@ -128,9 +128,13 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	case r := <-c.buffer:
 		return r, nil
 	case <-c.tomb.Dead():
-		return sdk.Record{}, c.tomb.Err()
+		err := c.tomb.Err()
+		sdk.Logger(ctx).Debug().Msgf("pubsub client tombstone.Dead(), err=%s", err)
+		return sdk.Record{}, err
 	case <-ctx.Done():
-		return sdk.Record{}, ctx.Err()
+		err := ctx.Err()
+		sdk.Logger(ctx).Debug().Msgf("pubsub client context.Done(), err=%s", err)
+		return sdk.Record{}, err
 	}
 }
 
