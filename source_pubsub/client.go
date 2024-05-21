@@ -128,13 +128,15 @@ func (c *PubSubClient) HasNext(ctx context.Context) bool {
 // Next returns the next record from the buffer.
 func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	select {
-	case r := <-c.buffer:
+	case r, ok := <-c.buffer:
+		if !ok {
+			if err := c.tomb.Err(); err != nil {
+					return sdk.Record{}, err
+			}
+			return sdk.Record{}, fmt.Errorf("processing stopped")
+		}
 		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
 		return r, nil
-	case <-c.tomb.Dead():
-		err := c.tomb.Err()
-		sdk.Logger(ctx).Debug().Msgf("pubsub client tombstone.Dead(), err=%s", err)
-		return sdk.Record{}, fmt.Errorf("pubsub client tombstone.Dead(), err=%s", err)
 	case <-ctx.Done():
 		err := ctx.Err()
 		sdk.Logger(ctx).Debug().Msgf("pubsub client context.Done(), err=%s", err)
@@ -150,6 +152,29 @@ func (c *PubSubClient) Stop() {
 func (c *PubSubClient) ReplayID() []byte {
 	return c.currreplayID
 }
+
+/*
+
+t.Go(func() error {
+	ctx := t.Context(nil)
+	if err := c.startCDC(ctx); err != nil {
+		return nil
+	}
+	return nil
+})
+
+func startCDC(ctx context.Context) error {
+	for {
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+			...
+		}
+	}
+}
+
+*/
 
 func (c *PubSubClient) startCDC() error {
 	defer close(c.caches)
@@ -181,7 +206,6 @@ func (c *PubSubClient) startCDC() error {
 }
 
 func (c *PubSubClient) flush() error {
-	defer close(c.buffer)
 	for {
 		select {
 		case <-c.tomb.Dying():
@@ -253,6 +277,12 @@ func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
 
 	c.tomb.Go(c.startCDC)
 	c.tomb.Go(c.flush)
+
+	// end processing when tomb procs have exited
+	go func() {
+		<-c.tomb.Dead()
+		close(c.buffer)
+	}()
 
 	return nil
 }
