@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
@@ -52,6 +53,7 @@ type PubSubClient struct {
 	conn         *grpc.ClientConn
 	pubSubClient proto.PubSubClient
 	subClient    proto.PubSub_SubscribeClient
+	mu           *sync.Mutex
 
 	codecCache  map[string]*goavro.Codec
 	unionFields map[string]map[string]struct{}
@@ -104,6 +106,7 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 		unionFields:  make(map[string]map[string]struct{}),
 		buffer:       make(chan sdk.Record, 1),
 		caches:       make(chan []ConnectResponseEvent),
+		mu:           &sync.Mutex{},
 		ticker:       time.NewTicker(pollingPeriod),
 		tomb:         &tomb.Tomb{},
 		topic:        config.TopicName,
@@ -127,18 +130,22 @@ func (c *PubSubClient) HasNext(ctx context.Context) bool {
 
 // Next returns the next record from the buffer.
 func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
+	sdk.Logger(ctx).Debug().Msgf("Next - number of records in buffer %d", len(c.buffer))
 	select {
-	case r := <-c.buffer:
-		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
-		return r, nil
-	case <-c.tomb.Dead():
+	case <-c.tomb.Dying():
 		err := c.tomb.Err()
-		sdk.Logger(ctx).Debug().Msgf("pubsub client tombstone.Dead(), err=%s", err)
-		return sdk.Record{}, fmt.Errorf("pubsub client tombstone.Dead(), err=%s", err)
+		sdk.Logger(ctx).Debug().Msgf("pubsub client tombstone.Dying(), err=%s", err)
+		return sdk.Record{}, fmt.Errorf("pubsub client tombstone.Dying(), err=%s", err)
 	case <-ctx.Done():
 		err := ctx.Err()
 		sdk.Logger(ctx).Debug().Msgf("pubsub client context.Done(), err=%s", err)
 		return sdk.Record{}, fmt.Errorf("pubsub client context.Done(), err=%s", err)
+	case r, ok := <-c.buffer:
+		if !ok {
+			return sdk.Record{}, fmt.Errorf("pubsub client, buffer is closed")
+		}
+		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
+		return r, nil
 	}
 }
 
@@ -151,54 +158,27 @@ func (c *PubSubClient) ReplayID() []byte {
 	return c.currreplayID
 }
 
-func (c *PubSubClient) startCDC() error {
+func (c *PubSubClient) startCDC(ctx context.Context) error {
 	defer close(c.caches)
 	sdk.Logger(context.Background()).Debug().Msg("StartCDC - Starting")
 	for {
 		select {
-		case <-c.tomb.Dying():
-			return c.tomb.Err()
+		case <-ctx.Done():
+			return ctx.Err()
 		case <-c.ticker.C: // detect changes every polling period.
 			sdk.Logger(context.Background()).Debug().Msg("StartCDC - Begin Receiving Events")
-			events, err := c.Recv(c.tomb.Context(nil)) //nolint:staticcheck // SA1012 tomb expects nil
+			events, err := c.Recv(ctx)
 			if err != nil {
 				return fmt.Errorf("error receiving events - %s", err)
 			}
 
-			select {
-			case c.caches <- events:
-				if len(events) != 0 {
-					c.currreplayID = events[len(events)-1].replayID
-				} else {
-					c.currreplayID = nil
-				}
-
-			case <-c.tomb.Dying():
-				return c.tomb.Err()
-			}
-		}
-	}
-}
-
-func (c *PubSubClient) flush() error {
-	defer close(c.buffer)
-	for {
-		select {
-		case <-c.tomb.Dying():
-			return c.tomb.Err()
-		case cache := <-c.caches:
-			for _, entry := range cache {
-				sdk.Logger(context.Background()).Debug().Msg("Flush - Build Record")
+			for _, entry := range events {
+				sdk.Logger(context.Background()).Debug().Msg("StartCDC - Build Record")
 				output, err := c.buildRecord(entry)
 				if err != nil {
 					return fmt.Errorf("could not build record for %q: %w", entry.replayID, err)
 				}
-				select {
-				case c.buffer <- output:
-					// worked fine
-				case <-c.tomb.Dying():
-					return c.tomb.Err()
-				}
+				c.buffer <- output
 			}
 		}
 	}
@@ -251,8 +231,18 @@ func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
 		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
 	}
 
-	c.tomb.Go(c.startCDC)
-	c.tomb.Go(c.flush)
+	c.tomb.Go(func() error {
+		ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
+		if err := c.startCDC(ctx); err != nil {
+			return nil
+		}
+		return nil
+	})
+
+	go func() {
+		<-c.tomb.Dead()
+		close(c.buffer)
+	}()
 
 	return nil
 }
