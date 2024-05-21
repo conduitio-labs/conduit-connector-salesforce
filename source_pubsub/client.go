@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
@@ -53,7 +52,6 @@ type PubSubClient struct {
 	conn         *grpc.ClientConn
 	pubSubClient proto.PubSubClient
 	subClient    proto.PubSub_SubscribeClient
-	mu           *sync.Mutex
 
 	codecCache  map[string]*goavro.Codec
 	unionFields map[string]map[string]struct{}
@@ -99,6 +97,8 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 
 	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Initialize Pubsub")
 
+	t, _ := tomb.WithContext(ctx)
+
 	pubSub := &PubSubClient{
 		conn:         conn,
 		pubSubClient: proto.NewPubSubClient(conn),
@@ -106,9 +106,8 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 		unionFields:  make(map[string]map[string]struct{}),
 		buffer:       make(chan sdk.Record, 1),
 		caches:       make(chan []ConnectResponseEvent),
-		mu:           &sync.Mutex{},
 		ticker:       time.NewTicker(pollingPeriod),
-		tomb:         &tomb.Tomb{},
+		tomb:         t,
 		topic:        config.TopicName,
 		currreplayID: sdkPos,
 	}
@@ -132,17 +131,16 @@ func (c *PubSubClient) HasNext(ctx context.Context) bool {
 func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	sdk.Logger(ctx).Debug().Msgf("Next - number of records in buffer %d", len(c.buffer))
 	select {
-	case <-c.tomb.Dying():
-		err := c.tomb.Err()
-		sdk.Logger(ctx).Debug().Msgf("pubsub client tombstone.Dying(), err=%s", err)
-		return sdk.Record{}, fmt.Errorf("pubsub client tombstone.Dying(), err=%s", err)
 	case <-ctx.Done():
 		err := ctx.Err()
 		sdk.Logger(ctx).Debug().Msgf("pubsub client context.Done(), err=%s", err)
 		return sdk.Record{}, fmt.Errorf("pubsub client context.Done(), err=%s", err)
 	case r, ok := <-c.buffer:
 		if !ok {
-			return sdk.Record{}, fmt.Errorf("pubsub client, buffer is closed")
+			if err := c.tomb.Err(); err != nil {
+				return sdk.Record{}, fmt.Errorf("tomb exited: %w", err)
+			}
+			return sdk.Record{}, fmt.Errorf("end of records, buffer closed")
 		}
 		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
 		return r, nil
@@ -159,7 +157,6 @@ func (c *PubSubClient) ReplayID() []byte {
 }
 
 func (c *PubSubClient) startCDC(ctx context.Context) error {
-	defer close(c.caches)
 	sdk.Logger(context.Background()).Debug().Msg("StartCDC - Starting")
 	for {
 		select {
