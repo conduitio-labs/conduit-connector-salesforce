@@ -53,7 +53,7 @@ type PubSubClient struct {
 	pubSubClient proto.PubSubClient
 	subClient    proto.PubSub_SubscribeClient
 
-	codecCache map[string]*goavro.Codec
+	codecCache  map[string]*goavro.Codec
 	unionFields map[string]map[string]struct{}
 
 	buffer chan sdk.Record
@@ -73,10 +73,10 @@ type ConnectResponseEvent struct {
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
-	ctx, cancelFn := context.WithTimeout(context.Background(), GRPCDialTimeout)
+	cx, cancelFn := context.WithTimeout(ctx, GRPCDialTimeout)
 	defer cancelFn()
 
-	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Starting GRPC Client")
+	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Starting GRPC Client")
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithBlock(),
@@ -90,18 +90,18 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	}
 
-	conn, err := grpc.DialContext(ctx, GRPCEndpoint, dialOpts...)
+	conn, err := grpc.DialContext(cx, GRPCEndpoint, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error on dialing grpc - %s", err)
 	}
 
-	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Initialize Pubsub")
+	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Initialize Pubsub")
 
 	pubSub := &PubSubClient{
 		conn:         conn,
 		pubSubClient: proto.NewPubSubClient(conn),
-		codecCache:  make(map[string]*goavro.Codec),
-		unionFields: make(map[string]map[string]struct{}),
+		codecCache:   make(map[string]*goavro.Codec),
+		unionFields:  make(map[string]map[string]struct{}),
 		buffer:       make(chan sdk.Record, 1),
 		caches:       make(chan []ConnectResponseEvent),
 		ticker:       time.NewTicker(pollingPeriod),
@@ -110,15 +110,18 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 		currreplayID: sdkPos,
 	}
 
-	if err := pubSub.Initialize(ctx, config); err != nil {
+	if err := pubSub.Initialize(cx, config); err != nil {
 		return nil, fmt.Errorf("could not initialize pubsub client - %s", err)
 	}
 
-	sdk.Logger(ctx).Debug().Msg("NewGRPCClient - Finished starting GRPC Client")
+	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Finished starting GRPC Client")
 	return pubSub, nil
 }
 
-func (c *PubSubClient) HasNext(_ context.Context) bool {
+func (c *PubSubClient) HasNext(ctx context.Context) bool {
+	sdk.Logger(ctx).Debug().Msgf("HasNext - number of records in buffer %d", len(c.buffer))
+	sdk.Logger(ctx).Debug().Msgf("HasNext - tomb status %t", !c.tomb.Alive())
+
 	return len(c.buffer) > 0 || !c.tomb.Alive() // if tomb is dead we return true so caller will fetch error with Next.
 }
 
@@ -126,15 +129,16 @@ func (c *PubSubClient) HasNext(_ context.Context) bool {
 func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	select {
 	case r := <-c.buffer:
+		sdk.Logger(ctx).Debug().Msgf("next record, err=%v", r)
 		return r, nil
 	case <-c.tomb.Dead():
 		err := c.tomb.Err()
 		sdk.Logger(ctx).Debug().Msgf("pubsub client tombstone.Dead(), err=%s", err)
-		return sdk.Record{}, err
+		return sdk.Record{}, fmt.Errorf("pubsub client tombstone.Dead(), err=%s", err)
 	case <-ctx.Done():
 		err := ctx.Err()
 		sdk.Logger(ctx).Debug().Msgf("pubsub client context.Done(), err=%s", err)
-		return sdk.Record{}, err
+		return sdk.Record{}, fmt.Errorf("pubsub client context.Done(), err=%s", err)
 	}
 }
 
@@ -207,7 +211,7 @@ func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (sdk.Record, erro
 		sdk.Metadata{},
 		sdk.StructuredData{
 			"replayId": event.replayID,
-			"id": event.eventID,
+			"id":       event.eventID,
 		},
 		sdk.StructuredData(event.Data),
 	)
@@ -220,7 +224,7 @@ func (c *PubSubClient) Close() {
 	c.conn.Close()
 }
 
-// Initializes the pubsub client by authenticating and 
+// Initializes the pubsub client by authenticating and
 func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
 	creds := Credentials{
 		ClientID:      config.ClientID,
@@ -486,10 +490,10 @@ func getCerts() *x509.CertPool {
 }
 
 // parseUnionFields parses the schema JSON to identify avro union fields
-func parseUnionFields(ctx context.Context, schemaJSON string) (map[string]struct{}, error) {
+func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}, error) {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return nil, fmt.Errorf("Failed to parse schema: %w", err)
+		return nil, fmt.Errorf("failed to parse schema: %w", err)
 	}
 
 	unionFields := make(map[string]struct{})
@@ -505,7 +509,7 @@ func parseUnionFields(ctx context.Context, schemaJSON string) (map[string]struct
 }
 
 // flattenUnionFields flattens union fields decoded from Avro
-func flattenUnionFields(ctx context.Context, data map[string]interface{}, unionFields map[string]struct{}) map[string]interface{} {
+func flattenUnionFields(_ context.Context, data map[string]interface{}, unionFields map[string]struct{}) map[string]interface{} {
 	flatData := make(map[string]interface{})
 	for key, value := range data {
 		if _, ok := unionFields[key]; ok { // Check if this field is a union
@@ -521,7 +525,6 @@ func flattenUnionFields(ctx context.Context, data map[string]interface{}, unionF
 			flatData[key] = value
 		}
 	}
-
 
 	return flatData
 }
