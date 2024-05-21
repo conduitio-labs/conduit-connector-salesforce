@@ -129,7 +129,7 @@ func (c *PubSubClient) HasNext(ctx context.Context) bool {
 func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	select {
 	case r := <-c.buffer:
-		sdk.Logger(ctx).Debug().Msgf("next record, err=%v", r)
+		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
 		return r, nil
 	case <-c.tomb.Dead():
 		err := c.tomb.Err()
