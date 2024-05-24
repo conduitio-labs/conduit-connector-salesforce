@@ -131,6 +131,8 @@ func (c *PubSubClient) HasNext(ctx context.Context) bool {
 // Next returns the next record from the buffer.
 func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	sdk.Logger(ctx).Debug().Msgf("Next - number of records in buffer %d", len(c.buffer))
+	sdk.Logger(ctx).Debug().Msgf("Next - context status %v", ctx.Err())
+
 	select {
 	case <-ctx.Done():
 		err := ctx.Err()
@@ -233,13 +235,16 @@ func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
 	c.tomb.Go(func() error {
 		ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
 		if err := c.startCDC(ctx); err != nil {
-			return nil
+			return err
 		}
 		return nil
 	})
 
 	go func() {
+		sdk.Logger(ctx).Debug().Msgf("Tomb Dead Go Routine - Start routine %v", ctx.Err())
 		<-c.tomb.Dead()
+		sdk.Logger(ctx).Debug().Msgf("Tomb Dead Go Routine - tomb dead %v", c.tomb.Err())
+		sdk.Logger(ctx).Debug().Msgf("Tomb Dead Go Routine - ctx status %v", ctx.Err())
 		close(c.buffer)
 	}()
 
@@ -380,6 +385,7 @@ func (c *PubSubClient) Recv(
 	resp, err := c.subClient.Recv()
 
 	sdk.Logger(ctx).Debug().Msg("Receive Funk 1 - Got events!")
+	sdk.Logger(ctx).Debug().Msgf("Received error - %s", err)
 
 	if err == io.EOF {
 		return nil, fmt.Errorf("stream closed")
