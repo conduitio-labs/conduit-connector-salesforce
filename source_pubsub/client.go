@@ -123,6 +123,7 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 func (c *PubSubClient) HasNext(ctx context.Context) bool {
 	sdk.Logger(ctx).Debug().Msgf("HasNext - number of records in buffer %d", len(c.buffer))
 	sdk.Logger(ctx).Debug().Msgf("HasNext - tomb status %t", !c.tomb.Alive())
+	sdk.Logger(ctx).Debug().Msgf("HasNext - tomb status err %t", c.tomb.Err())
 
 	return len(c.buffer) > 0 || !c.tomb.Alive() // if tomb is dead we return true so caller will fetch error with Next.
 }
@@ -140,7 +141,7 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 			if err := c.tomb.Err(); err != nil {
 				return sdk.Record{}, fmt.Errorf("tomb exited: %w", err)
 			}
-			return sdk.Record{}, fmt.Errorf("end of records, buffer closed")
+			return sdk.Record{}, fmt.Errorf("end of records : buffer closed, tomb status - %s", c.tomb.Err())
 		}
 		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
 		return r, nil
@@ -148,6 +149,7 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 }
 
 func (c *PubSubClient) Stop() {
+	sdk.Logger(context.Background()).Debug().Msg("Stop - stopping ticker!")
 	c.ticker.Stop()
 	c.tomb.Kill(errors.New("cdc iterator is stopped"))
 }
@@ -157,20 +159,20 @@ func (c *PubSubClient) ReplayID() []byte {
 }
 
 func (c *PubSubClient) startCDC(ctx context.Context) error {
-	sdk.Logger(context.Background()).Debug().Msg("StartCDC - Starting")
+	sdk.Logger(ctx).Debug().Msg("StartCDC - Starting")
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.ticker.C: // detect changes every polling period.
-			sdk.Logger(context.Background()).Debug().Msg("StartCDC - Begin Receiving Events")
+			sdk.Logger(ctx).Debug().Msg("StartCDC - Begin Receiving Events")
 			events, err := c.Recv(ctx)
 			if err != nil {
 				return fmt.Errorf("error receiving events - %s", err)
 			}
 
 			for _, entry := range events {
-				sdk.Logger(context.Background()).Debug().Msg("StartCDC - Build Record")
+				sdk.Logger(ctx).Debug().Msg("StartCDC - Build Record")
 				output, err := c.buildRecord(entry)
 				if err != nil {
 					return fmt.Errorf("could not build record for %q: %w", entry.replayID, err)
@@ -320,12 +322,13 @@ func (c *PubSubClient) Subscribe(
 	replayPreset proto.ReplayPreset,
 	replayID []byte,
 ) (proto.PubSub_SubscribeClient, []byte, error) {
+	sdk.Logger(ctx).Debug().Msg("Subscribing to pubsub.")
 	sdk.Logger(ctx).Trace().Msgf("replayID: %s", string(replayID))
 	sdk.Logger(ctx).Trace().Msgf("replayPreset: %s", proto.ReplayPreset_name[int32(replayPreset)])
 	sdk.Logger(ctx).Trace().Msgf("topicName: %s", topicName)
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
-		return nil, replayID, err
+		return nil, replayID, fmt.Errorf("error subscribing to pubsub, %s", err)
 	}
 
 	initialFetchRequest := &proto.FetchRequest{
@@ -376,6 +379,8 @@ func (c *PubSubClient) Recv(
 
 	resp, err := c.subClient.Recv()
 
+	sdk.Logger(ctx).Debug().Msg("Receive Funk 1 - Got events!")
+
 	if err == io.EOF {
 		return nil, fmt.Errorf("stream closed")
 	} else if err != nil {
@@ -383,7 +388,7 @@ func (c *PubSubClient) Recv(
 	}
 
 	var requestedEvents []ConnectResponseEvent
-	sdk.Logger(ctx).Debug().Msg("Receive Funk 4 - Receving events!")
+	sdk.Logger(ctx).Debug().Msg(fmt.Sprintf("Receive Funk 4 - Number of events %d", len(resp.Events)))
 
 	for _, event := range resp.Events {
 		var fetchedEvent ConnectResponseEvent
