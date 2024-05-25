@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
@@ -60,7 +61,7 @@ type PubSubClient struct {
 	caches chan []ConnectResponseEvent
 	ticker *time.Ticker
 
-	currreplayID []byte
+	currReplayID []byte
 	tomb         *tomb.Tomb
 	topic        string
 }
@@ -109,7 +110,7 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 		ticker:       time.NewTicker(pollingPeriod),
 		tomb:         t,
 		topic:        config.TopicName,
-		currreplayID: sdkPos,
+		currReplayID: sdkPos,
 	}
 
 	if err := pubSub.Initialize(cx, config); err != nil {
@@ -157,7 +158,7 @@ func (c *PubSubClient) Stop() {
 }
 
 func (c *PubSubClient) ReplayID() []byte {
-	return c.currreplayID
+	return c.currReplayID
 }
 
 func (c *PubSubClient) startCDC(ctx context.Context) error {
@@ -169,6 +170,15 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 		case <-c.ticker.C: // detect changes every polling period.
 			sdk.Logger(ctx).Debug().Msg("StartCDC - Begin Receiving Events")
 			events, err := c.Recv(ctx)
+			
+			// if replay ID is invalid, unset it, and try again
+			if strings.Contains(strings.ToLower(err.Error()), "replay id validation failed") {
+				sdk.Logger(ctx).Debug().Msgf("invalid replayID detected: %s", string(c.currReplayID))
+				sdk.Logger(ctx).Debug().Msg("attempting Recv() again")
+				c.currReplayID = nil
+				events, err = c.Recv(ctx)
+			}
+			
 			if err != nil {
 				return fmt.Errorf("start cdc error on receiving events - %s", err)
 			}
@@ -363,17 +373,17 @@ func (c *PubSubClient) Recv(
 	ctx context.Context,
 ) ([]ConnectResponseEvent, error) {
 	var err error
-	if len(c.currreplayID) > 0 {
-		c.subClient, c.currreplayID, err = c.Subscribe(
+	if len(c.currReplayID) > 0 {
+		c.subClient, c.currReplayID, err = c.Subscribe(
 			ctx,
 			c.topic,
 			proto.ReplayPreset_CUSTOM,
-			c.currreplayID)
+			c.currReplayID)
 		if err != nil {
-			return nil, fmt.Errorf("error subscribing to topic on custom replay id %s - %s", c.currreplayID, err)
+			return nil, fmt.Errorf("error subscribing to topic on custom replay id %s - %s", c.currReplayID, err)
 		}
 	} else {
-		c.subClient, c.currreplayID, err = c.Subscribe(
+		c.subClient, c.currReplayID, err = c.Subscribe(
 			ctx,
 			c.topic,
 			proto.ReplayPreset_LATEST,
@@ -383,12 +393,12 @@ func (c *PubSubClient) Recv(
 		}
 	}
 
-	sdk.Logger(ctx).Debug().Msgf("Receive Funk 1 - Waiting for events with replayID %s!", c.currreplayID)
+	sdk.Logger(ctx).Debug().Msgf("Receive Funk 1 - Waiting for events with replayID %s!", c.currReplayID)
 
 	resp, err := c.subClient.Recv()
 
 	sdk.Logger(ctx).Debug().Msg("Receive Funk 1 - Got events!")
-	sdk.Logger(ctx).Debug().Msgf("Received error for replay id %s - %s", c.currreplayID, err)
+	sdk.Logger(ctx).Debug().Msgf("Received error for replay id %s - %s", c.currReplayID, err)
 
 	if err == io.EOF {
 		return nil, fmt.Errorf("stream closed")
