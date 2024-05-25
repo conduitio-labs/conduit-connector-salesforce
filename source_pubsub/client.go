@@ -170,7 +170,7 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 			sdk.Logger(ctx).Debug().Msg("StartCDC - Begin Receiving Events")
 			events, err := c.Recv(ctx)
 			if err != nil {
-				return fmt.Errorf("error receiving events - %s", err)
+				return fmt.Errorf("start cdc error on receiving events - %s", err)
 			}
 
 			for _, entry := range events {
@@ -328,9 +328,9 @@ func (c *PubSubClient) Subscribe(
 	replayID []byte,
 ) (proto.PubSub_SubscribeClient, []byte, error) {
 	sdk.Logger(ctx).Debug().Msg("Subscribing to pubsub.")
-	sdk.Logger(ctx).Trace().Msgf("replayID: %s", string(replayID))
-	sdk.Logger(ctx).Trace().Msgf("replayPreset: %s", proto.ReplayPreset_name[int32(replayPreset)])
-	sdk.Logger(ctx).Trace().Msgf("topicName: %s", topicName)
+	sdk.Logger(ctx).Debug().Msgf("replayID: %s", string(replayID))
+	sdk.Logger(ctx).Debug().Msgf("replayPreset: %s", proto.ReplayPreset_name[int32(replayPreset)])
+	sdk.Logger(ctx).Debug().Msgf("topicName: %s", topicName)
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
 		return nil, replayID, fmt.Errorf("error subscribing to pubsub, %s", err)
@@ -347,6 +347,8 @@ func (c *PubSubClient) Subscribe(
 	}
 
 	err = subscribeClient.Send(initialFetchRequest)
+	sdk.Logger(ctx).Debug().Msgf("Subcribe pubsub status, %s", err)
+
 	if err == io.EOF {
 		sdk.Logger(ctx).Warn().Msg("EOF error returned from initial Send call, proceeding anyway")
 		return nil, replayID, fmt.Errorf("EOF error on subscribe send - %s", err)
@@ -380,12 +382,13 @@ func (c *PubSubClient) Recv(
 			return nil, fmt.Errorf("error subscribing to topic on latest - %s", err)
 		}
 	}
-	sdk.Logger(ctx).Debug().Msg("Receive Funk 1 - Waiting for events!")
+
+	sdk.Logger(ctx).Debug().Msgf("Receive Funk 1 - Waiting for events with replayID %s!", c.currreplayID)
 
 	resp, err := c.subClient.Recv()
 
 	sdk.Logger(ctx).Debug().Msg("Receive Funk 1 - Got events!")
-	sdk.Logger(ctx).Debug().Msgf("Received error - %s", err)
+	sdk.Logger(ctx).Debug().Msgf("Received error for replay id %s - %s", c.currreplayID, err)
 
 	if err == io.EOF {
 		return nil, fmt.Errorf("stream closed")
@@ -400,16 +403,21 @@ func (c *PubSubClient) Recv(
 		var fetchedEvent ConnectResponseEvent
 		getEvent := event.GetEvent()
 		codec, err := c.fetchCodec(ctx, getEvent.SchemaId)
+		sdk.Logger(ctx).Debug().Msgf("Receive Funk - fetching codec, err - %s", err)
+
 		if err != nil {
 			return requestedEvents, err
 		}
 
 		parsed, _, err := codec.NativeFromBinary(getEvent.Payload)
+		sdk.Logger(ctx).Debug().Msgf("Receive Funk - parsing payload, err - %s", err)
+
 		if err != nil {
 			return requestedEvents, err
 		}
 
 		payload, ok := parsed.(map[string]interface{})
+		sdk.Logger(ctx).Debug().Msgf("Receive Funk - payload status, err - %s", err)
 		if !ok {
 			return requestedEvents, fmt.Errorf("receive  - error casting parsed event: %v", payload)
 		}
@@ -422,7 +430,7 @@ func (c *PubSubClient) Recv(
 		requestedEvents = append(requestedEvents, fetchedEvent)
 	}
 
-	sdk.Logger(ctx).Debug().Msg("Receive Funk 8 - Finished Receive")
+	sdk.Logger(ctx).Debug().Msgf("Receive Funk 8 - Finished Receive, number of events - ", len(requestedEvents))
 
 	return requestedEvents, nil
 }
