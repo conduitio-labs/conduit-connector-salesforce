@@ -170,15 +170,20 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 		case <-c.ticker.C: // detect changes every polling period.
 			sdk.Logger(ctx).Debug().Msg("StartCDC - Begin Receiving Events")
 			events, err := c.Recv(ctx)
-			
-			// if replay ID is invalid, unset it, and try again
-			if strings.Contains(strings.ToLower(err.Error()), "replay id validation failed") {
-				sdk.Logger(ctx).Debug().Msgf("invalid replayID detected: %s", string(c.currReplayID))
-				sdk.Logger(ctx).Debug().Msg("attempting Recv() again")
-				c.currReplayID = nil
-				events, err = c.Recv(ctx)
+
+			if err != nil {
+				// if replay ID is invalid, unset it, and try again
+				if strings.Contains(strings.ToLower(err.Error()), "replay id validation failed") {
+					sdk.Logger(ctx).Debug().Msgf("invalid replayID detected: %s", string(c.currReplayID))
+					sdk.Logger(ctx).Debug().Msg("attempting Recv() again")
+					c.currReplayID = nil
+					events, err = c.Recv(ctx)
+				}
+
+			} else {
+				return fmt.Errorf("errored retrieving events with id - %s , error - %s", c.currReplayID, err)
 			}
-			
+
 			if err != nil {
 				return fmt.Errorf("start cdc error on receiving events - %s", err)
 			}
