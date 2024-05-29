@@ -101,7 +101,8 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	if err != nil && (
 		strings.Contains(err.Error(), "upstream connect error") ||
 		strings.Contains(err.Error(), "invalid_grant") ||
-		strings.Contains(err.Error(), "disconnect")) {
+		strings.Contains(err.Error(), "disconnect") ||
+		strings.Contains(err.Error(), "service is unavailable")) {
 		sdk.Logger(ctx).Debug().Msgf("Connection failed - trying to authenticate again: %s", err)
 		if err = s.reconnect(ctx); err != nil {
 			return sdk.Record{}, fmt.Errorf("error reinitializing client - %s", err)
