@@ -38,7 +38,7 @@ type Destination struct {
 	client *simpleforce.Client
 }
 
-// TODO: move to config file
+// TODO: move to config file.
 const (
 	ConfigKeyEnvironment   = "environment"
 	ConfigKeyClientID      = "clientId"
@@ -149,15 +149,15 @@ func (d *Destination) Configure(ctx context.Context, cfg map[string]string) erro
 	return nil
 }
 
-// Open sets up the salesforce client by authenticating
+// Open sets up the salesforce client by authenticating.
 func (d *Destination) Open(ctx context.Context) error {
 	client := simpleforce.NewClient(d.Config.InstanceURL, d.Config.ClientID, simpleforce.DefaultAPIVersion)
 	if client == nil {
 		return errors.New("Unable to create Salesforce client")
 	}
-	
+
 	d.client = client
-	
+
 	if err := d.login(ctx); err != nil {
 		return errors.Errorf("Unable to login to Salesforce: %w", err)
 	}
@@ -184,11 +184,6 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 
 		switch r.Operation {
 		case sdk.OperationUpdate, sdk.OperationDelete:
-			// fetch sfObj by key
-			objectName := d.Config.ObjectName
-			if !strings.HasSuffix(objectName, "__c") {
-				objectName = fmt.Sprintf("%s__c", objectName)
-			}
 			q := fmt.Sprintf(
 				"SELECT FIELDS(ALL) FROM %s WHERE %s = '%s' LIMIT 1",
 				d.Config.ObjectName,
@@ -254,7 +249,7 @@ func (d *Destination) Write(ctx context.Context, records []sdk.Record) (int, err
 	return len(records), nil
 }
 
-func (d *Destination) Teardown(ctx context.Context) error {
+func (d *Destination) Teardown(_ context.Context) error {
 	// TODO: implement
 	return nil
 }
@@ -268,7 +263,7 @@ func unmarshal(d sdk.Data, m *map[string]interface{}) error {
 	}
 
 	if err := json.Unmarshal(d.Bytes(), m); err != nil {
-		errors.New("cannot unmarshal JSON")
+		return err
 	}
 
 	return nil

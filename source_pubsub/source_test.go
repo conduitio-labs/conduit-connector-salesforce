@@ -1,3 +1,17 @@
+// Copyright © 2022 Meroxa, Inc. and Miquido
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package source
 
 import (
@@ -12,7 +26,7 @@ import (
 
 func Test_Read(t *testing.T) {
 	testRecord := sdk.Record{
-		Position: []byte("test1"),
+		Position:  []byte("test1"),
 		Operation: sdk.OperationCreate,
 		Metadata: sdk.Metadata{
 			"test1": "test",
@@ -28,25 +42,25 @@ func Test_Read(t *testing.T) {
 	}
 
 	testConfig := Config{
-		ClientID: "test-client-id",
-		ClientSecret: "test-client-secret",
+		ClientID:      "test-client-id",
+		ClientSecret:  "test-client-secret",
 		OAuthEndpoint: "https://somewhere",
-		TopicName: "/events/TestEvent__e",
+		TopicName:     "/events/TestEvent__e",
 	}
 
 	disconnectErr := errors.New("upstream connect error or disconnect/reset before headers. reset reason: connection termination")
 
-	testCases := []struct{
-		desc string
-		config Config
-		mockClient func() *mockClient
+	testCases := []struct {
+		desc           string
+		config         Config
+		mockClient     func() *mockClient
 		expectedRecord sdk.Record
-		expectedErr error
+		expectedErr    error
 	}{
 		{
-			desc: "success - receive event",
+			desc:   "success - receive event",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(true)
 				m.On("Next", mock.Anything).Return(testRecord, nil)
@@ -55,9 +69,9 @@ func Test_Read(t *testing.T) {
 			expectedRecord: testRecord,
 		},
 		{
-			desc: "success - no event, backoff",
+			desc:   "success - no event, backoff",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(false)
 				return m
@@ -65,9 +79,9 @@ func Test_Read(t *testing.T) {
 			expectedErr: sdk.ErrBackoffRetry,
 		},
 		{
-			desc: "success after reconnecting",
+			desc:   "success after reconnecting",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(true).Times(1)
 				m.On("Next", mock.Anything).Return(sdk.Record{}, disconnectErr).Times(1)
@@ -78,9 +92,9 @@ func Test_Read(t *testing.T) {
 			expectedRecord: testRecord,
 		},
 		{
-			desc: "failed on Next after reconnect",
+			desc:   "failed on Next after reconnect",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(true).Times(1)
 				m.On("Next", mock.Anything).Return(sdk.Record{}, disconnectErr).Times(1)
@@ -91,9 +105,9 @@ func Test_Read(t *testing.T) {
 			expectedErr: errors.New("error receiving new events - test error"),
 		},
 		{
-			desc: "error - failed to reconnect",
+			desc:   "error - failed to reconnect",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(true).Times(1)
 				m.On("Next", mock.Anything).Return(sdk.Record{}, disconnectErr).Times(1)
@@ -103,9 +117,9 @@ func Test_Read(t *testing.T) {
 			expectedErr: errors.New("error reinitializing client - test error"),
 		},
 		{
-			desc: "error - failed on Next",
+			desc:   "error - failed on Next",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(true).Times(1)
 				m.On("Next", mock.Anything).Return(sdk.Record{}, errors.New("test error")).Times(1)
@@ -114,9 +128,9 @@ func Test_Read(t *testing.T) {
 			expectedErr: errors.New("error receiving new events - test error"),
 		},
 		{
-			desc: "error - record with empty payload",
+			desc:   "error - record with empty payload",
 			config: testConfig,
-			mockClient: func() *mockClient{
+			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("HasNext", mock.Anything).Return(true).Times(1)
 				m.On("Next", mock.Anything).Return(sdk.Record{Payload: sdk.Change{Before: nil, After: nil}}, nil).Times(1)

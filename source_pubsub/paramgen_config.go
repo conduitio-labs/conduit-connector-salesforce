@@ -33,6 +33,12 @@ func (Config) Parameters() map[string]sdk.Parameter {
 				sdk.ValidationRequired{},
 			},
 		},
+		"pollingPeriod": {
+			Default:     "100ms",
+			Description: "pollingPeriod is the client event polling interval",
+			Type:        sdk.ParameterTypeDuration,
+			Validations: []sdk.Validation{},
+		},
 		"topicName": {
 			Default:     "",
 			Description: "topicName is the topic the source connector will subscribe to",

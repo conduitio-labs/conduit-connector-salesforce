@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
@@ -34,6 +35,9 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
+//go:generate mockery --with-expecter --filename pubsub_client_mock.go --name PubSubClient --dir proto --log-level error
+//go:generate mockery --with-expecter --filename pubsub_subscribe_client_mock.go --name PubSub_SubscribeClient --dir proto --log-level error
+
 var (
 	// topic and subscription-related variables.
 
@@ -43,12 +47,19 @@ var (
 	GRPCCallTimeout = 5 * time.Second
 )
 
+var (
+	ErrEndOfRecords = errors.New("end of records from stream")
+)
+
 type PubSubClient struct {
+	mu sync.Mutex
+
 	accessToken string
 	instanceURL string
+	userID      string
+	orgID       string
 
-	userID string
-	orgID  string
+	oauth authenticator
 
 	conn         *grpc.ClientConn
 	pubSubClient proto.PubSubClient
@@ -58,12 +69,11 @@ type PubSubClient struct {
 	unionFields map[string]map[string]struct{}
 
 	buffer chan sdk.Record
-	caches chan []ConnectResponseEvent
 	ticker *time.Ticker
 
 	currReplayID []byte
 	tomb         *tomb.Tomb
-	topic        string
+	topicName    string
 }
 
 type ConnectResponseEvent struct {
@@ -73,11 +83,10 @@ type ConnectResponseEvent struct {
 }
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
-func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
-	cx, cancelFn := context.WithTimeout(ctx, GRPCDialTimeout)
-	defer cancelFn()
+func NewGRPCClient(ctx context.Context, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
+	logger := sdk.Logger(ctx)
 
-	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Starting GRPC Client")
+	logger.Debug().Msg("NewGRPCClient - Starting GRPC Client")
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithBlock(),
@@ -91,42 +100,90 @@ func NewGRPCClient(ctx context.Context, pollingPeriod time.Duration, config Conf
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	}
 
-	conn, err := grpc.DialContext(cx, GRPCEndpoint, dialOpts...)
+	dialCtx, cancel := context.WithTimeout(ctx, GRPCDialTimeout)
+	defer cancel()
+
+	conn, err := grpc.DialContext(dialCtx, GRPCEndpoint, dialOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("error on dialing grpc - %s", err)
 	}
 
-	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Initialize Pubsub")
+	creds, err := NewCredentials(config.ClientID, config.ClientSecret, config.OAuthEndpoint)
+	if err != nil {
+		return nil, err
+	}
 
-	t, _ := tomb.WithContext(ctx)
-
-	pubSub := &PubSubClient{
+	return &PubSubClient{
 		conn:         conn,
 		pubSubClient: proto.NewPubSubClient(conn),
 		codecCache:   make(map[string]*goavro.Codec),
 		unionFields:  make(map[string]map[string]struct{}),
-		buffer:       make(chan sdk.Record, 1),
-		caches:       make(chan []ConnectResponseEvent),
-		ticker:       time.NewTicker(pollingPeriod),
-		tomb:         t,
-		topic:        config.TopicName,
 		currReplayID: sdkPos,
-	}
-
-	if err := pubSub.Initialize(cx, config); err != nil {
-		return nil, fmt.Errorf("could not initialize pubsub client - %s", err)
-	}
-
-	sdk.Logger(cx).Debug().Msg("NewGRPCClient - Finished starting GRPC Client")
-	return pubSub, nil
+		buffer:       make(chan sdk.Record),
+		ticker:       time.NewTicker(config.PollingPeriod),
+		topicName:    config.TopicName,
+		oauth:        &oauth{Credentials: creds},
+	}, nil
 }
 
-func (c *PubSubClient) HasNext(ctx context.Context) bool {
-	sdk.Logger(ctx).Debug().Msgf("HasNext - number of records in buffer %d", len(c.buffer))
-	sdk.Logger(ctx).Debug().Msgf("HasNext - tomb status %t", !c.tomb.Alive())
-	sdk.Logger(ctx).Debug().Msgf("HasNext - tomb status err %t", c.tomb.Err())
+// Initializes the pubsub client by authenticating and.
+func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
+	if err := c.login(); err != nil {
+		return err
+	}
 
-	return len(c.buffer) > 0 || !c.tomb.Alive() // if tomb is dead we return true so caller will fetch error with Next.
+	sdk.Logger(ctx).Info().Msg("fetched user info")
+
+	topic, err := c.GetTopic(config.TopicName)
+	if err != nil {
+		return fmt.Errorf("could not fetch topic: %w", err)
+	}
+	sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
+
+	if !topic.GetCanSubscribe() {
+		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
+	}
+
+	c.tomb, _ = tomb.WithContext(ctx)
+
+	c.tomb.Go(func() error {
+		ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
+		if err := c.startCDC(ctx); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	go func() {
+		<-c.tomb.Dead()
+
+		sdk.Logger(ctx).Info().Err(c.tomb.Err()).Msgf("tomb died, closing buffer")
+		close(c.buffer)
+	}()
+
+	return nil
+}
+
+func (c *PubSubClient) login() error {
+	authResp, err := c.oauth.Login()
+	if err != nil {
+		return err
+	}
+
+	userInfoResp, err := c.oauth.UserInfo(authResp.AccessToken)
+	if err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.accessToken = authResp.AccessToken
+	c.instanceURL = authResp.InstanceURL
+	c.userID = userInfoResp.UserID
+	c.orgID = userInfoResp.UserID
+
+	return nil
 }
 
 // Next returns the next record from the buffer.
@@ -136,25 +193,36 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 
 	select {
 	case <-ctx.Done():
-		err := ctx.Err()
-		sdk.Logger(ctx).Debug().Msgf("pubsub client context.Done(), err=%s", err)
-		return sdk.Record{}, fmt.Errorf("pubsub client context.Done(), err=%s", err)
+		return sdk.Record{}, fmt.Errorf("next: context done: %w", ctx.Err())
 	case r, ok := <-c.buffer:
 		if !ok {
 			if err := c.tomb.Err(); err != nil {
 				return sdk.Record{}, fmt.Errorf("tomb exited: %w", err)
 			}
-			return sdk.Record{}, fmt.Errorf("end of records : buffer closed, tomb status - %s", c.tomb.Err())
+			return sdk.Record{}, ErrEndOfRecords
 		}
 		sdk.Logger(ctx).Debug().Msgf("next record - %v", r)
 		return r, nil
 	}
 }
 
+// Stop ends CDC processing.
 func (c *PubSubClient) Stop() {
 	sdk.Logger(context.Background()).Debug().Msg("Stop - stopping ticker!")
 	c.ticker.Stop()
-	c.tomb.Kill(errors.New("cdc iterator is stopped"))
+	_ = c.tomb.Killf("cdc iterator is stopping")
+}
+
+func (c *PubSubClient) Wait(ctx context.Context) error {
+	tctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
+
+	select {
+	case <-tctx.Done():
+		return tctx.Err()
+	case <-c.tomb.Dead():
+		return c.tomb.Err()
+	}
 }
 
 func (c *PubSubClient) ReplayID() []byte {
@@ -178,9 +246,16 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 				c.currReplayID = nil
 				events, err = c.Recv(ctx)
 			}
-
 			if err != nil {
-				return fmt.Errorf("start cdc error on receiving events - %s", err)
+				if !c.authErr(err) {
+					return fmt.Errorf("error recv events: %w", err)
+				}
+
+				if err := c.login(); err != nil {
+					return fmt.Errorf("failed to refresh auth: %w", err)
+				}
+
+				break // retry with fresh credentials
 			}
 
 			for _, entry := range events {
@@ -193,6 +268,15 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+func (*PubSubClient) authErr(err error) bool {
+	msg := err.Error()
+
+	return strings.Contains(msg, "upstream connect error") ||
+		strings.Contains(msg, "invalid_grant") ||
+		strings.Contains(msg, "disconnect") ||
+		strings.Contains(msg, "service is unavailable")
 }
 
 func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (sdk.Record, error) {
@@ -211,82 +295,8 @@ func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (sdk.Record, erro
 }
 
 // Closes the underlying connection to the gRPC server.
-func (c *PubSubClient) Close() {
-	c.conn.Close()
-}
-
-// Initializes the pubsub client by authenticating and
-func (c *PubSubClient) Initialize(ctx context.Context, config Config) error {
-	creds := Credentials{
-		ClientID:      config.ClientID,
-		ClientSecret:  config.ClientSecret,
-		OAuthEndpoint: config.OAuthEndpoint,
-	}
-
-	if err := c.Authenticate(creds); err != nil {
-		return fmt.Errorf("could not authenticate: %w", err)
-	}
-
-	if err := c.FetchUserInfo(config.OAuthEndpoint); err != nil {
-		return fmt.Errorf("could not fetch user info: %w", err)
-	}
-	sdk.Logger(ctx).Info().Msg("fetched user info")
-
-	topic, err := c.GetTopic(config.TopicName)
-	if err != nil {
-		return fmt.Errorf("could not fetch topic: %w", err)
-	}
-	sdk.Logger(ctx).Info().Msgf("got topic %s", topic.TopicName)
-
-	if !topic.GetCanSubscribe() {
-		return fmt.Errorf("this user is not allowed to subscribe to the following topic: %s", topic.TopicName)
-	}
-
-	c.tomb.Go(func() error {
-		ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
-		if err := c.startCDC(ctx); err != nil {
-			return err
-		}
-		return nil
-	})
-
-	go func() {
-		sdk.Logger(ctx).Debug().Msgf("Tomb Dead Go Routine - Start routine %v", ctx.Err())
-		<-c.tomb.Dead()
-		sdk.Logger(ctx).Debug().Msgf("Tomb Dead Go Routine - tomb dead %v", c.tomb.Err())
-		sdk.Logger(ctx).Debug().Msgf("Tomb Dead Go Routine - ctx status %v", ctx.Err())
-		close(c.buffer)
-	}()
-
-	return nil
-}
-
-// Makes a call to the OAuth server to fetch credentials. Credentials are stored as part of the PubSubClient object so that they can be.
-// referenced later in other methods.
-func (c *PubSubClient) Authenticate(creds Credentials) error {
-	resp, err := Login(creds)
-	if err != nil {
-		return err
-	}
-
-	c.accessToken = resp.AccessToken
-	c.instanceURL = resp.InstanceURL
-
-	return nil
-}
-
-// Makes a call to the OAuth server to fetch user info. User info is stored as part of the PubSubClient object so that it can be referenced.
-// later in other methods.
-func (c *PubSubClient) FetchUserInfo(oauthEndpoint string) error {
-	resp, err := UserInfo(oauthEndpoint, c.accessToken)
-	if err != nil {
-		return fmt.Errorf("error getting user info from oauth server - %s", err)
-	}
-
-	c.userID = resp.UserID
-	c.orgID = resp.OrganizationID
-
-	return nil
+func (c *PubSubClient) Close() error {
+	return c.conn.Close()
 }
 
 // Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic.
@@ -369,27 +379,25 @@ func (c *PubSubClient) Subscribe(
 	return subscribeClient, replayID, nil
 }
 
-func (c *PubSubClient) Recv(
-	ctx context.Context,
-) ([]ConnectResponseEvent, error) {
+func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error) {
 	var err error
 	if len(c.currReplayID) > 0 {
 		c.subClient, c.currReplayID, err = c.Subscribe(
 			ctx,
-			c.topic,
+			c.topicName,
 			proto.ReplayPreset_CUSTOM,
 			c.currReplayID)
 		if err != nil {
-			return nil, fmt.Errorf("error subscribing to topic on custom replay id %s - %s", c.currReplayID, err)
+			return nil, fmt.Errorf("error subscribing to topic on custom replay id %q: %w", c.currReplayID, err)
 		}
 	} else {
 		c.subClient, c.currReplayID, err = c.Subscribe(
 			ctx,
-			c.topic,
+			c.topicName,
 			proto.ReplayPreset_LATEST,
 			nil)
 		if err != nil {
-			return nil, fmt.Errorf("error subscribing to topic on latest - %s", err)
+			return nil, fmt.Errorf("error subscribing to topic on latest: %w", err)
 		}
 	}
 
@@ -440,7 +448,7 @@ func (c *PubSubClient) Recv(
 		requestedEvents = append(requestedEvents, fetchedEvent)
 	}
 
-	sdk.Logger(ctx).Debug().Msgf("Receive Funk 8 - Finished Receive, number of events - ", len(requestedEvents))
+	sdk.Logger(ctx).Debug().Msgf("Receive Funk 8 - Finished Receive, number of events - %d", len(requestedEvents))
 
 	return requestedEvents, nil
 }
@@ -505,7 +513,7 @@ func getCerts() *x509.CertPool {
 	return x509.NewCertPool()
 }
 
-// parseUnionFields parses the schema JSON to identify avro union fields
+// parseUnionFields parses the schema JSON to identify avro union fields.
 func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}, error) {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
@@ -524,7 +532,7 @@ func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}
 	return unionFields, nil
 }
 
-// flattenUnionFields flattens union fields decoded from Avro
+// flattenUnionFields flattens union fields decoded from Avro.
 func flattenUnionFields(_ context.Context, data map[string]interface{}, unionFields map[string]struct{}) map[string]interface{} {
 	flatData := make(map[string]interface{})
 	for key, value := range data {

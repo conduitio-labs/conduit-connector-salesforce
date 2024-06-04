@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2022 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,48 +17,27 @@ package source
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
 
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-//go:generate paramgen -output=paramgen_src.go Config
-//go:generate mockery --name=client --inpackage
-
-type Config struct {
-	// ClientID is the client id from the salesforce app
-	ClientID string `json:"clientID" validate:"required"`
-
-	// ClientSecret is the client secret from the salesforce app
-	ClientSecret string `json:"clientSecret" validate:"required"`
-
-	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
-	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
-
-	// TopicName is the topic the source connector will subscribe to
-	TopicName string `json:"topicName" validate:"required"`
-
-	// Deprecated: Username is the client secret from the salesforce app.
-	Username string `json:"username"`
+//go:generate mockery --with-expecter --name=client --inpackage --log-level error
+type client interface {
+	Next(context.Context) (sdk.Record, error)
+	Initialize(context.Context, Config) error
+	ReplayID() []byte
+	Stop()
+	Close() error
+	Wait(context.Context) error
 }
+
+var _ client = (*PubSubClient)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
 
-	client          client
-	subscribeClient proto.PubSub_SubscribeClient
-	config          Config
-}
-
-type client interface {
-	HasNext(_ context.Context) bool
-	Next(ctx context.Context) (sdk.Record, error)
-	Stop()
-	Initialize(ctx context.Context, config Config) error
-	ReplayID() []byte
-	Close()
+	client client
+	config Config
 }
 
 func NewSource() sdk.Source {
@@ -74,53 +53,51 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 		return fmt.Errorf("failed to parse config - %s", err)
 	}
 
+	if err := s.config.Validate(); err != nil {
+		return fmt.Errorf("config failed to validate: %w", err)
+	}
+
 	sdk.Logger(ctx).Info().Msg("parsed source configuration")
 
 	return nil
 }
 
-func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) (err error) {
+func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 	sdk.Logger(ctx).Debug().Msg("Open - Open Connector")
 
-	s.client, err = NewGRPCClient(ctx, time.Duration(2), s.config, sdkPos)
+	client, err := NewGRPCClient(ctx, s.config, sdkPos)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
+
+	if err := client.Initialize(ctx, s.config); err != nil {
+		return fmt.Errorf("could not initialize pubsub client: %w", err)
+	}
+
+	s.client = client
 
 	return nil
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
-	sdk.Logger(ctx).Debug().Msg("Read - Start reading events")
-	if !s.client.HasNext(ctx) {
-		sdk.Logger(ctx).Debug().Msg("Read - No next events, backoff....")
-		return sdk.Record{}, sdk.ErrBackoffRetry
-	}
-	sdk.Logger(ctx).Debug().Msg("Read - Getting next event.")
-	r, err := s.client.Next(ctx)
-	if err != nil && (
-		strings.Contains(err.Error(), "upstream connect error") ||
-		strings.Contains(err.Error(), "invalid_grant") ||
-		strings.Contains(err.Error(), "disconnect") ||
-		strings.Contains(err.Error(), "service is unavailable")) {
-		sdk.Logger(ctx).Debug().Msgf("Connection failed - trying to authenticate again: %s", err)
-		if err = s.reconnect(ctx); err != nil {
-			return sdk.Record{}, fmt.Errorf("error reinitializing client - %s", err)
-		}
+	sdk.Logger(ctx).Debug().Msg("Read - Getting next event")
 
-		sdk.Logger(ctx).Debug().Msg("Successfully re-authenticated.")
-		r, err = s.client.Next(ctx)
-	}
+	r, err := s.client.Next(ctx)
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("error receiving new events - %s", err)
+		sdk.Logger(ctx).Error().Err(err).Msg("next: failed to get next record")
+		return sdk.Record{}, err
 	}
+
 	sdk.Logger(ctx).Debug().Msgf("read event: %+v", r)
 
 	// filter out empty record payloads
-	if (r.Payload.Before == nil && r.Payload.After == nil) {
-		sdk.Logger(ctx).Error().Msgf("empty record payload detected. backing off to retry: %+v", r)
+	if r.Payload.Before == nil && r.Payload.After == nil {
+		sdk.Logger(ctx).Error().
+			Msgf("empty record payload detected. backing off: %+v", r)
+
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
+
 	return r, nil
 }
 
@@ -129,19 +106,17 @@ func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
 	return nil
 }
 
-func (s *Source) reconnect(ctx context.Context) error {
-	if err := s.client.Initialize(ctx, s.config); err != nil {
-		return err
+func (s *Source) Teardown(ctx context.Context) error {
+	s.client.Stop()
+
+	if err := s.client.Wait(ctx); err != nil {
+		sdk.Logger(ctx).Error().Err(err).
+			Msg("received error while stopping client")
 	}
 
-	return nil
-}
-
-func (s *Source) Teardown(_ context.Context) error {
-	if err := s.subscribeClient.CloseSend(); err != nil {
-		return err
+	if err := s.client.Close(); err != nil {
+		return fmt.Errorf("error when closing subscriber conn: %w", err)
 	}
 
-	s.client.Close()
 	return nil
 }
