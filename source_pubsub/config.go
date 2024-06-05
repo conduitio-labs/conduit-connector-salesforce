@@ -17,6 +17,7 @@ package source
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"time"
 )
@@ -41,6 +42,12 @@ type Config struct {
 
 	// PollingPeriod is the client event polling interval
 	PollingPeriod time.Duration `json:"pollingPeriod" default:"100ms"`
+
+	// gRPC Pubsub Salesforce API address
+	PubsubAddress string `json:"pubsubAddress" default:"api.pubsub.salesforce.com:7443"`
+
+	// InsecureSkipVerify disables certificate validation
+	InsecureSkipVerify bool `json:"insecureSkipVerify"`
 }
 
 func (c Config) Validate() error {
@@ -70,6 +77,16 @@ func (c Config) Validate() error {
 
 	if c.PollingPeriod == 0 {
 		errs = append(errs, fmt.Errorf("polling period cannot be zero %d", c.PollingPeriod))
+	}
+
+	if c.PubsubAddress == "" {
+		errs = append(errs, fmt.Errorf("invalid pubsub address %q", c.OAuthEndpoint))
+	}
+
+	if c.PubsubAddress != "" {
+		if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {
+			errs = append(errs, fmt.Errorf("failed to parse pubsub address: %w", err))
+		}
 	}
 
 	return errors.Join(errs...)

@@ -25,6 +25,12 @@ func (Config) Parameters() map[string]sdk.Parameter {
 				sdk.ValidationRequired{},
 			},
 		},
+		"insecureSkipVerify": {
+			Default:     "",
+			Description: "insecureSkipVerify disables certificate validation",
+			Type:        sdk.ParameterTypeBool,
+			Validations: []sdk.Validation{},
+		},
 		"oauthEndpoint": {
 			Default:     "",
 			Description: "oauthEndpoint is the oauthEndpoint from the salesforce app",
@@ -37,6 +43,12 @@ func (Config) Parameters() map[string]sdk.Parameter {
 			Default:     "100ms",
 			Description: "pollingPeriod is the client event polling interval",
 			Type:        sdk.ParameterTypeDuration,
+			Validations: []sdk.Validation{},
+		},
+		"pubsubAddress": {
+			Default:     "api.pubsub.salesforce.com:7443",
+			Description: "gRPC Pubsub Salesforce API address",
+			Type:        sdk.ParameterTypeString,
 			Validations: []sdk.Validation{},
 		},
 		"topicName": {

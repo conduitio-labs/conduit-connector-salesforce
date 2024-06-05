@@ -22,17 +22,17 @@ func (_m *mockClient) EXPECT() *mockClient_Expecter {
 	return &mockClient_Expecter{mock: &_m.Mock}
 }
 
-// Close provides a mock function with given fields:
-func (_m *mockClient) Close() error {
-	ret := _m.Called()
+// Close provides a mock function with given fields: _a0
+func (_m *mockClient) Close(_a0 context.Context) error {
+	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Close")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -46,13 +46,14 @@ type mockClient_Close_Call struct {
 }
 
 // Close is a helper method to define mock.On call
-func (_e *mockClient_Expecter) Close() *mockClient_Close_Call {
-	return &mockClient_Close_Call{Call: _e.mock.On("Close")}
+//   - _a0 context.Context
+func (_e *mockClient_Expecter) Close(_a0 interface{}) *mockClient_Close_Call {
+	return &mockClient_Close_Call{Call: _e.mock.On("Close", _a0)}
 }
 
-func (_c *mockClient_Close_Call) Run(run func()) *mockClient_Close_Call {
+func (_c *mockClient_Close_Call) Run(run func(_a0 context.Context)) *mockClient_Close_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -62,22 +63,22 @@ func (_c *mockClient_Close_Call) Return(_a0 error) *mockClient_Close_Call {
 	return _c
 }
 
-func (_c *mockClient_Close_Call) RunAndReturn(run func() error) *mockClient_Close_Call {
+func (_c *mockClient_Close_Call) RunAndReturn(run func(context.Context) error) *mockClient_Close_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// Initialize provides a mock function with given fields: _a0, _a1
-func (_m *mockClient) Initialize(_a0 context.Context, _a1 Config) error {
-	ret := _m.Called(_a0, _a1)
+// Initialize provides a mock function with given fields: _a0
+func (_m *mockClient) Initialize(_a0 context.Context) error {
+	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Initialize")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, Config) error); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -92,14 +93,13 @@ type mockClient_Initialize_Call struct {
 
 // Initialize is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 Config
-func (_e *mockClient_Expecter) Initialize(_a0 interface{}, _a1 interface{}) *mockClient_Initialize_Call {
-	return &mockClient_Initialize_Call{Call: _e.mock.On("Initialize", _a0, _a1)}
+func (_e *mockClient_Expecter) Initialize(_a0 interface{}) *mockClient_Initialize_Call {
+	return &mockClient_Initialize_Call{Call: _e.mock.On("Initialize", _a0)}
 }
 
-func (_c *mockClient_Initialize_Call) Run(run func(_a0 context.Context, _a1 Config)) *mockClient_Initialize_Call {
+func (_c *mockClient_Initialize_Call) Run(run func(_a0 context.Context)) *mockClient_Initialize_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(Config))
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -109,7 +109,7 @@ func (_c *mockClient_Initialize_Call) Return(_a0 error) *mockClient_Initialize_C
 	return _c
 }
 
-func (_c *mockClient_Initialize_Call) RunAndReturn(run func(context.Context, Config) error) *mockClient_Initialize_Call {
+func (_c *mockClient_Initialize_Call) RunAndReturn(run func(context.Context) error) *mockClient_Initialize_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -217,9 +217,9 @@ func (_c *mockClient_ReplayID_Call) RunAndReturn(run func() []byte) *mockClient_
 	return _c
 }
 
-// Stop provides a mock function with given fields:
-func (_m *mockClient) Stop() {
-	_m.Called()
+// Stop provides a mock function with given fields: _a0
+func (_m *mockClient) Stop(_a0 context.Context) {
+	_m.Called(_a0)
 }
 
 // mockClient_Stop_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stop'
@@ -228,13 +228,14 @@ type mockClient_Stop_Call struct {
 }
 
 // Stop is a helper method to define mock.On call
-func (_e *mockClient_Expecter) Stop() *mockClient_Stop_Call {
-	return &mockClient_Stop_Call{Call: _e.mock.On("Stop")}
+//   - _a0 context.Context
+func (_e *mockClient_Expecter) Stop(_a0 interface{}) *mockClient_Stop_Call {
+	return &mockClient_Stop_Call{Call: _e.mock.On("Stop", _a0)}
 }
 
-func (_c *mockClient_Stop_Call) Run(run func()) *mockClient_Stop_Call {
+func (_c *mockClient_Stop_Call) Run(run func(_a0 context.Context)) *mockClient_Stop_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run()
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -244,7 +245,7 @@ func (_c *mockClient_Stop_Call) Return() *mockClient_Stop_Call {
 	return _c
 }
 
-func (_c *mockClient_Stop_Call) RunAndReturn(run func()) *mockClient_Stop_Call {
+func (_c *mockClient_Stop_Call) RunAndReturn(run func(context.Context)) *mockClient_Stop_Call {
 	_c.Call.Return(run)
 	return _c
 }

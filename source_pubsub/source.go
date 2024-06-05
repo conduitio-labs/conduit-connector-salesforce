@@ -24,10 +24,10 @@ import (
 //go:generate mockery --with-expecter --name=client --inpackage --log-level error
 type client interface {
 	Next(context.Context) (sdk.Record, error)
-	Initialize(context.Context, Config) error
+	Initialize(context.Context) error
 	ReplayID() []byte
-	Stop()
-	Close() error
+	Stop(context.Context)
+	Close(context.Context) error
 	Wait(context.Context) error
 }
 
@@ -48,7 +48,7 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 	return s.config.Parameters()
 }
 
-func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
+func (s *Source) Configure(_ context.Context, cfg map[string]string) error {
 	if err := sdk.Util.ParseConfig(cfg, &s.config); err != nil {
 		return fmt.Errorf("failed to parse config - %s", err)
 	}
@@ -57,20 +57,16 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 		return fmt.Errorf("config failed to validate: %w", err)
 	}
 
-	sdk.Logger(ctx).Info().Msg("parsed source configuration")
-
 	return nil
 }
 
 func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
-	sdk.Logger(ctx).Debug().Msg("Open - Open Connector")
-
 	client, err := NewGRPCClient(ctx, s.config, sdkPos)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
 
-	if err := client.Initialize(ctx, s.config); err != nil {
+	if err := client.Initialize(ctx); err != nil {
 		return fmt.Errorf("could not initialize pubsub client: %w", err)
 	}
 
@@ -80,20 +76,17 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
-	sdk.Logger(ctx).Debug().Msg("Read - Getting next event")
-
 	r, err := s.client.Next(ctx)
 	if err != nil {
 		sdk.Logger(ctx).Error().Err(err).Msg("next: failed to get next record")
 		return sdk.Record{}, err
 	}
 
-	sdk.Logger(ctx).Debug().Msgf("read event: %+v", r)
-
 	// filter out empty record payloads
 	if r.Payload.Before == nil && r.Payload.After == nil {
 		sdk.Logger(ctx).Error().
-			Msgf("empty record payload detected. backing off: %+v", r)
+			Str("record", fmt.Sprintf("%+v", r)).
+			Msg("backing off, empty record payload detected")
 
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
@@ -101,20 +94,23 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	return r, nil
 }
 
-func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
-	sdk.Logger(ctx).Debug().Str("position", string(position)).Msg("got ack")
+func (s *Source) Ack(_ context.Context, _ sdk.Position) error {
 	return nil
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	s.client.Stop()
+	if s.client == nil {
+		return nil
+	}
+
+	s.client.Stop(ctx)
 
 	if err := s.client.Wait(ctx); err != nil {
 		sdk.Logger(ctx).Error().Err(err).
 			Msg("received error while stopping client")
 	}
 
-	if err := s.client.Close(); err != nil {
+	if err := s.client.Close(ctx); err != nil {
 		return fmt.Errorf("error when closing subscriber conn: %w", err)
 	}
 
