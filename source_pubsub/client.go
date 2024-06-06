@@ -255,7 +255,10 @@ func (c *PubSubClient) ReplayID() []byte {
 func (c *PubSubClient) startCDC(ctx context.Context) error {
 	sdk.Logger(ctx).Info().Msg("starting CDC processing..")
 
-	var retryAuth bool
+	var (
+		retryAuth   bool
+		lastRecvdAt = time.Now().UTC()
+	)
 
 	for {
 		if retryAuth {
@@ -263,12 +266,19 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 			if err := c.login(ctx); err != nil {
 				return fmt.Errorf("failed to refresh auth: %w", err)
 			}
+			retryAuth = false
 		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-c.ticker.C: // detect changes every polling period.
+			sdk.Logger(ctx).Debug().
+				Dur("elapsed", time.Since(lastRecvdAt)).
+				Msg("attempting to receive new events")
+
+			lastRecvdAt = time.Now().UTC()
+
 			events, err := c.Recv(ctx)
 			if err != nil {
 				if c.invalidReplayIDErr(err) {
@@ -288,7 +298,10 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 				return fmt.Errorf("error recv events: %w", err)
 			}
 
-			sdk.Logger(ctx).Debug().Int("events", len(events)).Msg("received events")
+			sdk.Logger(ctx).Debug().
+				Int("events", len(events)).
+				Dur("elapsed", time.Since(lastRecvdAt)).
+				Msg("received events")
 
 			for _, e := range events {
 				c.buffer <- c.buildRecord(e)
@@ -345,8 +358,8 @@ func (c *PubSubClient) GetSchema(schemaID string) (*proto.SchemaInfo, error) {
 		SchemaId: schemaID,
 	}
 
-	ctx, cancelFn := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
-	defer cancelFn()
+	ctx, cancel := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
+	defer cancel()
 
 	resp, err := c.pubSubClient.GetSchema(ctx, req, grpc.Trailer(&trailer))
 	if err != nil {
@@ -365,6 +378,8 @@ func (c *PubSubClient) Subscribe(
 	replayPreset proto.ReplayPreset,
 	replayID []byte,
 ) (proto.PubSub_SubscribeClient, error) {
+	start := time.Now().UTC()
+
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe to topic %q: %w", c.topicName, err)
@@ -374,6 +389,7 @@ func (c *PubSubClient) Subscribe(
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
 		Str("replay_preset", proto.ReplayPreset_name[int32(replayPreset)]).
 		Str("topic_name", c.topicName).
+		Dur("elapsed", time.Since(start)).
 		Msgf("subscribed to %q", c.topicName)
 
 	initialFetchRequest := &proto.FetchRequest{
@@ -394,6 +410,13 @@ func (c *PubSubClient) Subscribe(
 		return nil, fmt.Errorf("initial fetch request failed: %w", err)
 	}
 
+	sdk.Logger(ctx).Debug().
+		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
+		Str("replay_preset", proto.ReplayPreset_name[int32(replayPreset)]).
+		Str("topic_name", c.topicName).
+		Dur("elapsed", time.Since(start)).
+		Msg("first request sent")
+
 	return subscribeClient, nil
 }
 
@@ -401,6 +424,7 @@ func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error)
 	var (
 		replayID []byte
 		preset   = proto.ReplayPreset_LATEST
+		start    = time.Now().UTC()
 	)
 
 	if len(c.currReplayID) > 0 {
@@ -421,6 +445,12 @@ func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error)
 		)
 	}
 
+	sdk.Logger(ctx).Info().
+		Str("preset", preset.String()).
+		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
+		Dur("elapsed", time.Since(start)).
+		Msg("preparing to receive events")
+
 	resp, err := subClient.Recv()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -429,6 +459,13 @@ func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error)
 
 		return nil, fmt.Errorf("pubsub: error when recv events: %w", err)
 	}
+
+	sdk.Logger(ctx).Info().
+		Str("preset", preset.String()).
+		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
+		Int("events", len(resp.Events)).
+		Dur("elapsed", time.Since(start)).
+		Msg("received events")
 
 	var events []ConnectResponseEvent
 
