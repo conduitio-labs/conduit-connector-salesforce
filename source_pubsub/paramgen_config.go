@@ -51,6 +51,12 @@ func (Config) Parameters() map[string]sdk.Parameter {
 			Type:        sdk.ParameterTypeString,
 			Validations: []sdk.Validation{},
 		},
+		"replayPreset": {
+			Default:     "earliest",
+			Description: "Replay preset for the position the connector is fetching events from, can be latest or default to earliest.",
+			Type:        sdk.ParameterTypeString,
+			Validations: []sdk.Validation{},
+		},
 		"topicName": {
 			Default:     "",
 			Description: "topicName is the topic the source connector will subscribe to",

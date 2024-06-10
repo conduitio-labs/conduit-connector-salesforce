@@ -35,7 +35,6 @@ var _ client = (*PubSubClient)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
-
 	client client
 	config Config
 }

@@ -51,10 +51,11 @@ var (
 type PubSubClient struct {
 	mu sync.Mutex
 
-	accessToken string
-	instanceURL string
-	userID      string
-	orgID       string
+	accessToken  string
+	instanceURL  string
+	userID       string
+	orgID        string
+	replayPreset proto.ReplayPreset
 
 	oauth authenticator
 
@@ -81,6 +82,7 @@ type ConnectResponseEvent struct {
 // Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(ctx context.Context, config Config, sdkPos sdk.Position) (*PubSubClient, error) {
 	var transportCreds credentials.TransportCredentials
+	var replayPreset proto.ReplayPreset
 
 	if config.InsecureSkipVerify {
 		transportCreds = insecure.NewCredentials()
@@ -108,12 +110,19 @@ func NewGRPCClient(ctx context.Context, config Config, sdkPos sdk.Position) (*Pu
 
 	t, _ := tomb.WithContext(ctx)
 
+	if config.ReplayPreset == "latest" {
+		replayPreset = proto.ReplayPreset_LATEST
+	} else {
+		replayPreset = proto.ReplayPreset_EARLIEST
+	}
+
 	return &PubSubClient{
 		conn:         conn,
 		pubSubClient: proto.NewPubSubClient(conn),
 		codecCache:   make(map[string]*goavro.Codec),
 		unionFields:  make(map[string]map[string]struct{}),
 		currReplayID: sdkPos,
+		replayPreset: replayPreset,
 		buffer:       make(chan sdk.Record),
 		ticker:       time.NewTicker(config.PollingPeriod),
 		topicName:    config.TopicName,
@@ -423,7 +432,7 @@ func (c *PubSubClient) Subscribe(
 func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error) {
 	var (
 		replayID []byte
-		preset   = proto.ReplayPreset_LATEST
+		preset   = c.replayPreset
 		start    = time.Now().UTC()
 	)
 

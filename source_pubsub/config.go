@@ -48,6 +48,9 @@ type Config struct {
 
 	// InsecureSkipVerify disables certificate validation
 	InsecureSkipVerify bool `json:"insecureSkipVerify"`
+
+	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
+	ReplayPreset string `json:"replayPreset" default:"earliest"`
 }
 
 func (c Config) Validate() error {
