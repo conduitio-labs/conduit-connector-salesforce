@@ -17,6 +17,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"encoding/base64"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
@@ -75,6 +76,8 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
+	logger := sdk.Logger(ctx)
+
 	r, err := s.client.Next(ctx)
 	if err != nil {
 		sdk.Logger(ctx).Error().Err(err).Msg("next: failed to get next record")
@@ -83,17 +86,26 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 
 	// filter out empty record payloads
 	if r.Payload.Before == nil && r.Payload.After == nil {
-		sdk.Logger(ctx).Error().
-			Str("record", fmt.Sprintf("%+v", r)).
+		logger.Error().Str("record", fmt.Sprintf("%+v", r)).
 			Msg("backing off, empty record payload detected")
 
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
+	logger.Debug().
+		Str("at", "source.read").
+		Str("position", base64.StdEncoding.EncodeToString(r.Position)).
+		Msg("sending record")
+
 	return r, nil
 }
 
-func (s *Source) Ack(_ context.Context, _ sdk.Position) error {
+func (s *Source) Ack(ctx context.Context, pos sdk.Position) error {
+	sdk.Logger(ctx).Debug().
+		Str("at", "source.ack").
+		Str("position", base64.StdEncoding.EncodeToString(pos)).
+		Msg("received ack")
+
 	return nil
 }
 

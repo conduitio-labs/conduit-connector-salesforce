@@ -474,7 +474,7 @@ func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error)
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
 		Int("events", len(resp.Events)).
 		Dur("elapsed", time.Since(start)).
-		Msg("received events")
+		Msg("subscriber received events")
 
 	var events []ConnectResponseEvent
 
