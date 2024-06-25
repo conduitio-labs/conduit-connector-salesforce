@@ -133,6 +133,7 @@ func NewGRPCClient(ctx context.Context, config Config, sdkPos sdk.Position) (*Pu
 
 // Initializes the pubsub client by authenticating and.
 func (c *PubSubClient) Initialize(ctx context.Context) error {
+
 	if err := c.login(ctx); err != nil {
 		return err
 	}
@@ -266,6 +267,7 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 
 	var (
 		retryAuth   bool
+		retryConn   bool
 		lastRecvdAt = time.Now().UTC()
 	)
 
@@ -276,6 +278,19 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 				return fmt.Errorf("failed to refresh auth: %w", err)
 			}
 			retryAuth = false
+		}
+
+		if retryConn {
+			sdk.Logger(ctx).Info().Msg("reconnecting to CDC")
+			if err := c.Close(ctx); err != nil {
+				sdk.Logger(ctx).Error().Err(err).Msg("failed to close connection")
+			}
+
+			if err := c.Initialize(ctx); err != nil {
+				return fmt.Errorf("failed to reinitialize client: %w", err)
+			}
+
+			retryConn = false
 		}
 
 		select {
@@ -297,10 +312,11 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 					break
 				}
 
-				if c.authErr(err) {
+				if c.authErr(err) || c.connErr(err) {
 					sdk.Logger(ctx).Error().Err(err).Msg("retrying authentication")
 
 					retryAuth = true
+					retryConn = true
 					break
 				}
 
@@ -330,7 +346,14 @@ func (*PubSubClient) authErr(err error) bool {
 	return strings.Contains(msg, "upstream connect error") ||
 		strings.Contains(msg, "invalid_grant") ||
 		strings.Contains(msg, "disconnect") ||
-		strings.Contains(msg, "service is unavailable")
+		strings.Contains(msg, "service is unavailable") ||
+		strings.Contains(msg, "instanceurl is invalid")
+}
+
+func (*PubSubClient) connErr(err error) bool {
+	msg := err.Error()
+
+	return strings.Contains(msg, "is unavailable")
 }
 
 func (c *PubSubClient) buildRecord(event ConnectResponseEvent) sdk.Record {
@@ -466,7 +489,14 @@ func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error)
 			return nil, fmt.Errorf("pubsub: stream closed when receiving events: %w", err)
 		}
 
-		return nil, fmt.Errorf("pubsub: error when recv events: %w", err)
+		sdk.Logger(ctx).Warn().
+			Str("preset", preset.String()).
+			Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
+			Dur("elapsed", time.Since(start)).
+			Err(err).
+			Msg("preparing to receive events")
+
+		return nil, nil
 	}
 
 	sdk.Logger(ctx).Info().

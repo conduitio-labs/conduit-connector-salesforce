@@ -16,8 +16,8 @@ package source
 
 import (
 	"context"
-	"fmt"
 	"encoding/base64"
+	"fmt"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
