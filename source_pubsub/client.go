@@ -44,9 +44,7 @@ var (
 	GRPCCallTimeout = 5 * time.Second
 )
 
-var (
-	ErrEndOfRecords = errors.New("end of records from stream")
-)
+var ErrEndOfRecords = errors.New("end of records from stream")
 
 type PubSubClient struct {
 	mu sync.Mutex
@@ -133,7 +131,6 @@ func NewGRPCClient(ctx context.Context, config Config, sdkPos sdk.Position) (*Pu
 
 // Initializes the pubsub client by authenticating and.
 func (c *PubSubClient) Initialize(ctx context.Context) error {
-
 	if err := c.login(ctx); err != nil {
 		return err
 	}
@@ -488,15 +485,16 @@ func (c *PubSubClient) Recv(ctx context.Context) ([]ConnectResponseEvent, error)
 		if errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("pubsub: stream closed when receiving events: %w", err)
 		}
-
-		sdk.Logger(ctx).Warn().
-			Str("preset", preset.String()).
-			Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
-			Dur("elapsed", time.Since(start)).
-			Err(err).
-			Msg("preparing to receive events")
-
-		return nil, nil
+		if c.connErr(err) {
+			sdk.Logger(ctx).Warn().
+				Str("preset", preset.String()).
+				Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
+				Dur("elapsed", time.Since(start)).
+				Err(err).
+				Msg("error while receiving events - retrying to connect")
+			return nil, nil
+		}
+		return nil, err
 	}
 
 	sdk.Logger(ctx).Info().
