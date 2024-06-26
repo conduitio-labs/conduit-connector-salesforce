@@ -92,6 +92,9 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
+	// setting topic name as collection
+	r.Metadata.SetCollection(s.config.TopicName)
+
 	logger.Debug().
 		Str("at", "source.read").
 		Str("position", base64.StdEncoding.EncodeToString(r.Position)).
