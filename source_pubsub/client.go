@@ -283,8 +283,12 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 				sdk.Logger(ctx).Error().Err(err).Msg("failed to close connection")
 			}
 
-			if err := c.Initialize(ctx); err != nil {
-				return fmt.Errorf("failed to reinitialize client: %w", err)
+			if err := c.login(ctx); err != nil {
+				return fmt.Errorf("failed to refresh auth: %w", err)
+			}
+
+			if err := c.canSubscribe(ctx); err != nil {
+				return err
 			}
 
 			retryConn = false
