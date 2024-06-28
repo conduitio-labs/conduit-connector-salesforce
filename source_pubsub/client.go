@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	rt "github.com/avast/retry-go/v4"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/linkedin/goavro/v2"
@@ -42,6 +43,7 @@ import (
 var (
 	GRPCDialTimeout = 5 * time.Second
 	GRPCCallTimeout = 5 * time.Second
+	RetryDelay      = 10 * time.Second
 )
 
 var ErrEndOfRecords = errors.New("end of records from stream")
@@ -268,29 +270,29 @@ func (c *PubSubClient) ReplayID() []byte {
 }
 
 func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (error, bool) {
-	for retry {
-		var err error
-		sdk.Logger(ctx).Info().Msgf("retry connection - retries %d ", c.retryCount)
+	var err error
+	sdk.Logger(ctx).Info().Msgf("retry connection - retries %d ", c.retryCount)
 
-		if err = c.login(ctx); err != nil && c.retryCount <= 0 {
-			return fmt.Errorf("failed to refresh auth: %w", err), retry
-		} else if err != nil {
-			sdk.Logger(ctx).Info().Msgf("received error on login - retry - %d ", c.retryCount)
-			c.retryCount--
-		}
-
-		if err = c.Initialize(ctx); err != nil && c.retryCount <= 0 {
-			return fmt.Errorf("failed to reinitialize client: %w", err), retry
-		} else if err != nil {
-			sdk.Logger(ctx).Info().Msgf("received error on init - retry - %d ", c.retryCount)
-			c.retryCount--
-		}
-
-		if err == nil {
-			retry = false
-			c.retryCount--
-		}
+	if err = c.login(ctx); err != nil && c.retryCount <= 0 {
+		return fmt.Errorf("failed to refresh auth: %w", err), retry
+	} else if err != nil {
+		sdk.Logger(ctx).Info().Msgf("received error on login - retry - %d ", c.retryCount)
+		c.retryCount--
+		retry = true
+		return nil, retry
 	}
+
+	if err = c.Initialize(ctx); err != nil && c.retryCount <= 0 {
+		return fmt.Errorf("failed to reinitialize client: %w", err), retry
+	} else if err != nil {
+		sdk.Logger(ctx).Info().Msgf("received error on init - retry - %d ", c.retryCount)
+		c.retryCount--
+		retry = true
+		return nil, retry
+	}
+
+	retry = false
+	c.retryCount--
 	return nil, retry
 }
 
@@ -305,7 +307,18 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 
 	for {
 		if retry {
-			err, retry = c.retryAuth(ctx, retry)
+			err := rt.Do(func() error {
+				err, retry = c.retryAuth(ctx, retry)
+				return err
+			},
+				rt.RetryIf(func(err error) bool {
+					if retry && c.retryCount > 0 {
+						return true
+					}
+					return false
+				}),
+				rt.Delay(RetryDelay),
+			)
 			if err != nil {
 				return fmt.Errorf("error retrying (number of retries %d) auth - %s", c.retryCount, err)
 			}
