@@ -217,6 +217,38 @@ func (_c *mockClient_ReplayID_Call) RunAndReturn(run func() []byte) *mockClient_
 	return _c
 }
 
+// ResetRetryCount provides a mock function with given fields:
+func (_m *mockClient) ResetRetryCount() {
+	_m.Called()
+}
+
+// mockClient_ResetRetryCount_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResetRetryCount'
+type mockClient_ResetRetryCount_Call struct {
+	*mock.Call
+}
+
+// ResetRetryCount is a helper method to define mock.On call
+func (_e *mockClient_Expecter) ResetRetryCount() *mockClient_ResetRetryCount_Call {
+	return &mockClient_ResetRetryCount_Call{Call: _e.mock.On("ResetRetryCount")}
+}
+
+func (_c *mockClient_ResetRetryCount_Call) Run(run func()) *mockClient_ResetRetryCount_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *mockClient_ResetRetryCount_Call) Return() *mockClient_ResetRetryCount_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *mockClient_ResetRetryCount_Call) RunAndReturn(run func()) *mockClient_ResetRetryCount_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Stop provides a mock function with given fields: _a0
 func (_m *mockClient) Stop(_a0 context.Context) {
 	_m.Called(_a0)
