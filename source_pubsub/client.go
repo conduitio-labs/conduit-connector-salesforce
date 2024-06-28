@@ -271,28 +271,26 @@ func (c *PubSubClient) ReplayID() []byte {
 
 func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (error, bool) {
 	var err error
-	sdk.Logger(ctx).Info().Msgf("retry connection - retries %d ", c.retryCount)
+	sdk.Logger(ctx).Info().Msgf("retry connection - retries remaining %d ", c.retryCount)
+	c.retryCount--
 
 	if err = c.login(ctx); err != nil && c.retryCount <= 0 {
 		return fmt.Errorf("failed to refresh auth: %w", err), retry
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on login - retry - %d ", c.retryCount)
-		c.retryCount--
 		retry = true
-		return nil, retry
+		return fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount), retry
 	}
 
 	if err := c.canSubscribe(ctx); err != nil && c.retryCount <= 0 {
 		return fmt.Errorf("failed to subscribe to client topic: %w", err), retry
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on subscribe - retry - %d ", c.retryCount)
-		c.retryCount--
 		retry = true
-		return nil, retry
+		return fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount), retry
 	}
 
 	retry = false
-	c.retryCount--
 	return nil, retry
 }
 
@@ -311,13 +309,8 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 				err, retry = c.retryAuth(ctx, retry)
 				return err
 			},
-				rt.RetryIf(func(err error) bool {
-					if retry && c.retryCount > 0 {
-						return true
-					}
-					return false
-				}),
 				rt.Delay(RetryDelay),
+				rt.Attempts(uint(c.retryCount)),
 			)
 			if err != nil {
 				return fmt.Errorf("error retrying (number of retries %d) auth - %s", c.retryCount, err)
