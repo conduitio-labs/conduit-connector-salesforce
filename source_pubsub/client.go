@@ -282,10 +282,10 @@ func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (error, bool) 
 		return nil, retry
 	}
 
-	if err = c.Initialize(ctx); err != nil && c.retryCount <= 0 {
-		return fmt.Errorf("failed to reinitialize client: %w", err), retry
+	if err := c.canSubscribe(ctx); err != nil && c.retryCount <= 0 {
+		return fmt.Errorf("failed to subscribe to client topic: %w", err), retry
 	} else if err != nil {
-		sdk.Logger(ctx).Info().Msgf("received error on init - retry - %d ", c.retryCount)
+		sdk.Logger(ctx).Info().Msgf("received error on subscribe - retry - %d ", c.retryCount)
 		c.retryCount--
 		retry = true
 		return nil, retry
