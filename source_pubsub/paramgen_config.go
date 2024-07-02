@@ -57,6 +57,12 @@ func (Config) Parameters() map[string]sdk.Parameter {
 			Type:        sdk.ParameterTypeString,
 			Validations: []sdk.Validation{},
 		},
+		"retryCount": {
+			Default:     "10",
+			Description: "Number of retries allowed per read before the connector errors out",
+			Type:        sdk.ParameterTypeInt,
+			Validations: []sdk.Validation{},
+		},
 		"topicName": {
 			Default:     "",
 			Description: "topicName is the topic the source connector will subscribe to",

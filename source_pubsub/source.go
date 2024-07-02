@@ -30,6 +30,7 @@ type client interface {
 	Stop(context.Context)
 	Close(context.Context) error
 	Wait(context.Context) error
+	ResetRetryCount()
 }
 
 var _ client = (*PubSubClient)(nil)
@@ -77,6 +78,7 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	logger := sdk.Logger(ctx)
+	s.client.ResetRetryCount()
 
 	r, err := s.client.Next(ctx)
 	if err != nil {
