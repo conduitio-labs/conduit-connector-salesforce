@@ -147,10 +147,7 @@ func (c *PubSubClient) Initialize(ctx context.Context) error {
 
 	c.tomb.Go(func() error {
 		ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
-		if err := c.startCDC(ctx); err != nil {
-			return err
-		}
-		return nil
+		return c.startCDC(ctx)
 	})
 
 	go func() {
@@ -269,29 +266,29 @@ func (c *PubSubClient) ReplayID() []byte {
 	return c.currReplayID
 }
 
-func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (error, bool) {
+func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (bool, error) {
 	var err error
 	sdk.Logger(ctx).Info().Msgf("retry connection - retries remaining %d ", c.retryCount)
 	c.retryCount--
 
 	if err = c.login(ctx); err != nil && c.retryCount <= 0 {
-		return fmt.Errorf("failed to refresh auth: %w", err), retry
+		return retry, fmt.Errorf("failed to refresh auth: %w", err)
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on login - retry - %d ", c.retryCount)
 		retry = true
-		return fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount), retry
+		return retry, fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount)
 	}
 
 	if err := c.canSubscribe(ctx); err != nil && c.retryCount <= 0 {
-		return fmt.Errorf("failed to subscribe to client topic: %w", err), retry
+		return retry, fmt.Errorf("failed to subscribe to client topic: %w", err)
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on subscribe - retry - %d ", c.retryCount)
 		retry = true
-		return fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount), retry
+		return retry, fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount)
 	}
 
 	retry = false
-	return nil, retry
+	return retry, nil
 }
 
 func (c *PubSubClient) startCDC(ctx context.Context) error {
@@ -306,7 +303,7 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 	for {
 		if retry {
 			err := rt.Do(func() error {
-				err, retry = c.retryAuth(ctx, retry)
+				retry, err = c.retryAuth(ctx, retry)
 				return err
 			},
 				rt.Delay(RetryDelay),
