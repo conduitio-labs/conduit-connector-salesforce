@@ -51,6 +51,8 @@ type Config struct {
 
 	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
 	ReplayPreset string `json:"replayPreset" default:"earliest"`
+	// Number of retries allowed per read before the connector errors out
+	RetryCount int `json:"retryCount" default:"10"`
 }
 
 func (c Config) Validate() error {

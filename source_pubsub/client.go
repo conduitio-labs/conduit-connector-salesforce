@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	rt "github.com/avast/retry-go/v4"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/linkedin/goavro/v2"
@@ -42,6 +43,7 @@ import (
 var (
 	GRPCDialTimeout = 5 * time.Second
 	GRPCCallTimeout = 5 * time.Second
+	RetryDelay      = 10 * time.Second
 )
 
 var ErrEndOfRecords = errors.New("end of records from stream")
@@ -69,6 +71,8 @@ type PubSubClient struct {
 	currReplayID []byte
 	tomb         *tomb.Tomb
 	topicName    string
+	retryCount   int
+	maxRetries   int
 }
 
 type ConnectResponseEvent struct {
@@ -126,6 +130,8 @@ func NewGRPCClient(ctx context.Context, config Config, sdkPos sdk.Position) (*Pu
 		topicName:    config.TopicName,
 		oauth:        &oauth{Credentials: creds},
 		tomb:         t,
+		retryCount:   config.RetryCount,
+		maxRetries:   config.RetryCount,
 	}, nil
 }
 
@@ -141,10 +147,7 @@ func (c *PubSubClient) Initialize(ctx context.Context) error {
 
 	c.tomb.Go(func() error {
 		ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
-		if err := c.startCDC(ctx); err != nil {
-			return err
-		}
-		return nil
+		return c.startCDC(ctx)
 	})
 
 	go func() {
@@ -255,43 +258,60 @@ func (c *PubSubClient) Wait(ctx context.Context) error {
 	}
 }
 
+func (c *PubSubClient) ResetRetryCount() {
+	c.retryCount = c.maxRetries
+}
+
 func (c *PubSubClient) ReplayID() []byte {
 	return c.currReplayID
+}
+
+func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (bool, error) {
+	var err error
+	sdk.Logger(ctx).Info().Msgf("retry connection - retries remaining %d ", c.retryCount)
+	c.retryCount--
+
+	if err = c.login(ctx); err != nil && c.retryCount <= 0 {
+		return retry, fmt.Errorf("failed to refresh auth: %w", err)
+	} else if err != nil {
+		sdk.Logger(ctx).Info().Msgf("received error on login - retry - %d ", c.retryCount)
+		retry = true
+		return retry, fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount)
+	}
+
+	if err := c.canSubscribe(ctx); err != nil && c.retryCount <= 0 {
+		return retry, fmt.Errorf("failed to subscribe to client topic: %w", err)
+	} else if err != nil {
+		sdk.Logger(ctx).Info().Msgf("received error on subscribe - retry - %d ", c.retryCount)
+		retry = true
+		return retry, fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount)
+	}
+
+	retry = false
+	return retry, nil
 }
 
 func (c *PubSubClient) startCDC(ctx context.Context) error {
 	sdk.Logger(ctx).Info().Msg("starting CDC processing..")
 
 	var (
-		retryAuth   bool
-		retryConn   bool
+		retry       bool
+		err         error
 		lastRecvdAt = time.Now().UTC()
 	)
 
 	for {
-		if retryAuth {
-			sdk.Logger(ctx).Info().Msg("refreshing auth token")
-			if err := c.login(ctx); err != nil {
-				return fmt.Errorf("failed to refresh auth: %w", err)
-			}
-			retryAuth = false
-		}
-
-		if retryConn {
-			sdk.Logger(ctx).Info().Msg("reconnecting to CDC")
-			if err := c.Close(ctx); err != nil {
-				sdk.Logger(ctx).Error().Err(err).Msg("failed to close connection")
-			}
-
-			if err := c.login(ctx); err != nil {
-				return fmt.Errorf("failed to refresh auth: %w", err)
-			}
-
-			if err := c.canSubscribe(ctx); err != nil {
+		if retry {
+			err := rt.Do(func() error {
+				retry, err = c.retryAuth(ctx, retry)
 				return err
+			},
+				rt.Delay(RetryDelay),
+				rt.Attempts(uint(c.retryCount)),
+			)
+			if err != nil {
+				return fmt.Errorf("error retrying (number of retries %d) auth - %s", c.retryCount, err)
 			}
-
-			retryConn = false
 		}
 
 		select {
@@ -307,17 +327,14 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 			events, err := c.Recv(ctx)
 			if err != nil {
 				if c.invalidReplayIDErr(err) {
-					sdk.Logger(ctx).Error().Err(err).Msg("replay id is invalid, retrying")
-
+					sdk.Logger(ctx).Error().Err(err).Msgf("replay id %s is invalid, retrying", string(c.currReplayID))
 					c.currReplayID = nil
 					break
 				}
 
-				if c.authErr(err) || c.connErr(err) {
+				if c.retryCount > 0 {
 					sdk.Logger(ctx).Error().Err(err).Msg("retrying authentication")
-
-					retryAuth = true
-					retryConn = true
+					retry = true
 					break
 				}
 
@@ -339,16 +356,6 @@ func (c *PubSubClient) startCDC(ctx context.Context) error {
 
 func (*PubSubClient) invalidReplayIDErr(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "replay id validation failed")
-}
-
-func (*PubSubClient) authErr(err error) bool {
-	msg := err.Error()
-
-	return strings.Contains(msg, "upstream connect error") ||
-		strings.Contains(msg, "invalid_grant") ||
-		strings.Contains(msg, "disconnect") ||
-		strings.Contains(msg, "service is unavailable") ||
-		strings.Contains(msg, "instanceurl is invalid")
 }
 
 func (*PubSubClient) connErr(err error) bool {

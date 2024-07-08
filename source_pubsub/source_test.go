@@ -48,8 +48,6 @@ func Test_Read(t *testing.T) {
 		TopicName:     "/events/TestEvent__e",
 	}
 
-	disconnectErr := errors.New("upstream connect error or disconnect/reset before headers. reset reason: connection termination")
-
 	testCases := []struct {
 		desc           string
 		config         Config
@@ -62,8 +60,9 @@ func Test_Read(t *testing.T) {
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(true)
+				m.On("ResetRetryCount").Return(nil)
 				m.On("Next", mock.Anything).Return(testRecord, nil)
+
 				return m
 			},
 			expectedRecord: testRecord,
@@ -73,56 +72,20 @@ func Test_Read(t *testing.T) {
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(false)
+				m.On("Next", mock.Anything).Return(sdk.Record{}, nil).Times(1)
+				m.On("ResetRetryCount").Return(nil)
 				return m
 			},
 			expectedErr: sdk.ErrBackoffRetry,
 		},
-		{
-			desc:   "success after reconnecting",
-			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(true).Times(1)
-				m.On("Next", mock.Anything).Return(sdk.Record{}, disconnectErr).Times(1)
-				m.On("Initialize", mock.Anything, testConfig).Return(nil).Times(1)
-				m.On("Next", mock.Anything).Return(testRecord, nil).Times(1)
-				return m
-			},
-			expectedRecord: testRecord,
-		},
-		{
-			desc:   "failed on Next after reconnect",
-			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(true).Times(1)
-				m.On("Next", mock.Anything).Return(sdk.Record{}, disconnectErr).Times(1)
-				m.On("Initialize", mock.Anything, testConfig).Return(nil).Times(1)
-				m.On("Next", mock.Anything).Return(sdk.Record{}, errors.New("test error")).Times(1)
-				return m
-			},
-			expectedErr: errors.New("error receiving new events - test error"),
-		},
-		{
-			desc:   "error - failed to reconnect",
-			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(true).Times(1)
-				m.On("Next", mock.Anything).Return(sdk.Record{}, disconnectErr).Times(1)
-				m.On("Initialize", mock.Anything, testConfig).Return(errors.New("test error")).Times(1)
-				return m
-			},
-			expectedErr: errors.New("error reinitializing client - test error"),
-		},
+
 		{
 			desc:   "error - failed on Next",
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(true).Times(1)
-				m.On("Next", mock.Anything).Return(sdk.Record{}, errors.New("test error")).Times(1)
+				m.On("ResetRetryCount").Return(nil)
+				m.On("Next", mock.Anything).Return(sdk.Record{}, errors.New("error receiving new events - test error")).Times(1)
 				return m
 			},
 			expectedErr: errors.New("error receiving new events - test error"),
@@ -132,7 +95,7 @@ func Test_Read(t *testing.T) {
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("HasNext", mock.Anything).Return(true).Times(1)
+				m.On("ResetRetryCount").Return(nil)
 				m.On("Next", mock.Anything).Return(sdk.Record{Payload: sdk.Change{Before: nil, After: nil}}, nil).Times(1)
 				return m
 			},

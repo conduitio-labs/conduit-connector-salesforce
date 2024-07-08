@@ -262,11 +262,7 @@ func unmarshal(d sdk.Data, m *map[string]interface{}) error {
 		return nil
 	}
 
-	if err := json.Unmarshal(d.Bytes(), m); err != nil {
-		return err
-	}
-
-	return nil
+	return json.Unmarshal(d.Bytes(), m)
 }
 
 func (d *Destination) login(ctx context.Context) error {
