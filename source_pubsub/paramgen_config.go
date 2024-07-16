@@ -63,9 +63,9 @@ func (Config) Parameters() map[string]sdk.Parameter {
 			Type:        sdk.ParameterTypeInt,
 			Validations: []sdk.Validation{},
 		},
-		"topicName": {
+		"topicNames": {
 			Default:     "",
-			Description: "topicName is the topic the source connector will subscribe to",
+			Description: "TopicName is the topic the source connector will subscribe to",
 			Type:        sdk.ParameterTypeString,
 			Validations: []sdk.Validation{
 				sdk.ValidationRequired{},

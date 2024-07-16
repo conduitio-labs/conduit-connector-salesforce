@@ -35,7 +35,7 @@ type Config struct {
 	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
 
 	// TopicName is the topic the source connector will subscribe to
-	TopicName string `json:"topicName" validate:"required"`
+	TopicNames []string `json:"topicNames" validate:"required"`
 
 	// Deprecated: Username is the client secret from the salesforce app.
 	Username string `json:"username"`
@@ -76,8 +76,8 @@ func (c Config) Validate() error {
 		}
 	}
 
-	if c.TopicName == "" {
-		errs = append(errs, fmt.Errorf("invalid topic name %q", c.TopicName))
+	if len(c.TopicNames) == 0 {
+		errs = append(errs, fmt.Errorf("invalid topic name %q", c.TopicNames))
 	}
 
 	if c.PollingPeriod == 0 {

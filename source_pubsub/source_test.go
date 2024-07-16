@@ -45,7 +45,7 @@ func Test_Read(t *testing.T) {
 		ClientID:      "test-client-id",
 		ClientSecret:  "test-client-secret",
 		OAuthEndpoint: "https://somewhere",
-		TopicName:     "/events/TestEvent__e",
+		TopicNames:    []string{"/events/TestEvent__e"},
 	}
 
 	testCases := []struct {

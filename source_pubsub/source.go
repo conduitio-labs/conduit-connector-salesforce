@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/position"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
@@ -26,7 +27,6 @@ import (
 type client interface {
 	Next(context.Context) (sdk.Record, error)
 	Initialize(context.Context) error
-	ReplayID() []byte
 	Stop(context.Context)
 	Close(context.Context) error
 	Wait(context.Context) error
@@ -62,7 +62,18 @@ func (s *Source) Configure(_ context.Context, cfg map[string]string) error {
 }
 
 func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
-	client, err := NewGRPCClient(ctx, s.config, sdkPos)
+	logger := sdk.Logger(ctx)
+
+	logger.Debug().
+		Str("at", "source.open").
+		Str("position", base64.StdEncoding.EncodeToString(sdkPos)).
+		Msg("OPEN START AT ")
+
+	parsedPositions, err := position.ParseSDKPosition(sdkPos)
+	if err != nil {
+		return fmt.Errorf("could not parsed sdk position %w", sdkPos)
+	}
+	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
@@ -95,11 +106,17 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	}
 
 	// setting topic name as collection
-	r.Metadata.SetCollection(s.config.TopicName)
+	//r.Metadata.SetCollection(s.config.TopicName)
+
+	topic, err := r.Metadata.GetCollection()
+	if err != nil {
+		return sdk.Record{}, err
+	}
 
 	logger.Debug().
 		Str("at", "source.read").
 		Str("position", base64.StdEncoding.EncodeToString(r.Position)).
+		Str("record on topic", topic).
 		Msg("sending record")
 
 	return r, nil
@@ -108,6 +125,7 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 func (s *Source) Ack(ctx context.Context, pos sdk.Position) error {
 	sdk.Logger(ctx).Debug().
 		Str("at", "source.ack").
+		Str("uncoded position ", string(pos)).
 		Str("position", base64.StdEncoding.EncodeToString(pos)).
 		Msg("received ack")
 
