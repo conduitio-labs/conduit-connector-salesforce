@@ -29,7 +29,8 @@ func Test_Read(t *testing.T) {
 		Position:  []byte("test1"),
 		Operation: sdk.OperationCreate,
 		Metadata: sdk.Metadata{
-			"test1": "test",
+			"test1":              "test",
+			"opencdc.collection": "test",
 		},
 		Key: sdk.StructuredData{
 			"test1": "test",
@@ -45,7 +46,7 @@ func Test_Read(t *testing.T) {
 		ClientID:      "test-client-id",
 		ClientSecret:  "test-client-secret",
 		OAuthEndpoint: "https://somewhere",
-		TopicNames:    []string{"/events/TestEvent__e"},
+		TopicNames:    []string{"/events/TestEvent__e", "/events/TestEvent2__e"},
 	}
 
 	testCases := []struct {
@@ -60,7 +61,6 @@ func Test_Read(t *testing.T) {
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("ResetRetryCount").Return(nil)
 				m.On("Next", mock.Anything).Return(testRecord, nil)
 
 				return m
@@ -73,7 +73,6 @@ func Test_Read(t *testing.T) {
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
 				m.On("Next", mock.Anything).Return(sdk.Record{}, nil).Times(1)
-				m.On("ResetRetryCount").Return(nil)
 				return m
 			},
 			expectedErr: sdk.ErrBackoffRetry,
@@ -84,7 +83,6 @@ func Test_Read(t *testing.T) {
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("ResetRetryCount").Return(nil)
 				m.On("Next", mock.Anything).Return(sdk.Record{}, errors.New("error receiving new events - test error")).Times(1)
 				return m
 			},
@@ -95,7 +93,6 @@ func Test_Read(t *testing.T) {
 			config: testConfig,
 			mockClient: func() *mockClient {
 				m := newMockClient(t)
-				m.On("ResetRetryCount").Return(nil)
 				m.On("Next", mock.Anything).Return(sdk.Record{Payload: sdk.Change{Before: nil, After: nil}}, nil).Times(1)
 				return m
 			},

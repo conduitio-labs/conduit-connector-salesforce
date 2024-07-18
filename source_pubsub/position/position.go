@@ -33,6 +33,12 @@ func ParseSDKPosition(sdkPos sdk.Position) (Topics, error) {
 	return p, nil
 }
 
+func NewTopicPosition() Topics {
+	var p Topics
+	p.Topics = make(TopicPositions)
+	return p
+}
+
 func (p Topics) SetTopics(topics []string) {
 	for _, topic := range topics {
 		if _, ok := p.Topics[topic]; !ok {
@@ -62,7 +68,7 @@ func (p Topics) SetTopicReplayID(topic string, replayID []byte) {
 			topicEvent.ReadTime = time.Now()
 			p.Topics[topic] = topicEvent
 		} else {
-			//should never be even reaching this point, something went wrong if we do
+			// should never be even reaching this point, something went wrong if we do
 			panic(fmt.Errorf("attempting to set replay id - %b on topic %s, topic doesn't exist on position", replayID, topic))
 		}
 	}

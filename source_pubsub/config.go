@@ -15,11 +15,15 @@
 package source
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
+
+	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 //go:generate paramgen -output=paramgen_config.go Config
@@ -34,8 +38,10 @@ type Config struct {
 	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
 	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
 
-	// TopicName is the topic the source connector will subscribe to
-	TopicNames []string `json:"topicNames" validate:"required"`
+	// TopicName {WARN will be deprecated soon} the TopicName the source connector will subscribe to
+	TopicName string `json:"topicName"`
+	// TopicNames are the TopicNames the source connector will subscribe to
+	TopicNames []string `json:"topicNames"`
 
 	// Deprecated: Username is the client secret from the salesforce app.
 	Username string `json:"username"`
@@ -55,7 +61,7 @@ type Config struct {
 	RetryCount int `json:"retryCount" default:"10"`
 }
 
-func (c Config) Validate() error {
+func (c Config) Validate(ctx context.Context) (Config, error) {
 	var errs []error
 
 	if c.ClientID == "" {
@@ -76,8 +82,28 @@ func (c Config) Validate() error {
 		}
 	}
 
+	// validate and set the TopicNames.
+	if len(c.TopicName) == 0 && len(c.TopicNames) == 0 {
+		errs = append(errs, fmt.Errorf("required parameter missing: %q", "TopicNames"))
+	}
+
+	if len(c.TopicName) > 0 && len(c.TopicNames) > 0 {
+		errs = append(errs, fmt.Errorf(`can't provide both "TopicName" and "TopicNames" parameters, "TopicName" is deprecated and will be removed, use the "TopicNames" parameter instead`))
+	}
+	if len(c.TopicName) > 0 && len(c.TopicNames) == 0 {
+		sdk.Logger(ctx).Warn().Msg(`"TopicName" parameter is deprecated and will be removed, please use "TopicNames" instead.`)
+		// add the TopicName value to the TopicNames slice.
+		c.TopicNames = make([]string, 1)
+		c.TopicNames[0] = c.TopicName
+		sdk.Logger(ctx).Warn().
+			Str("topics", strings.Join(c.TopicNames, ",")).
+			Str("topic", c.TopicName).
+			Msg(`"TopicName" parameter is deprecated and will be removed, please use "TopicNames" instead.`)
+
+	}
+
 	if len(c.TopicNames) == 0 {
-		errs = append(errs, fmt.Errorf("invalid topic name %q", c.TopicNames))
+		errs = append(errs, fmt.Errorf("invalid TopicName name %q", c.TopicNames))
 	}
 
 	if c.PollingPeriod == 0 {
@@ -94,5 +120,5 @@ func (c Config) Validate() error {
 		}
 	}
 
-	return errors.Join(errs...)
+	return c, errors.Join(errs...)
 }

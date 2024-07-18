@@ -67,14 +67,17 @@ type PubSubClient struct {
 	unionFields map[string]map[string]struct{}
 
 	buffer chan sdk.Record
-	caches chan []ConnectResponseEvent
 	ticker *time.Ticker
 
 	tomb       *tomb.Tomb
 	topicNames []string
 	sdkPos     position.Topics
-	retryCount int
 	maxRetries int
+}
+
+type Topic struct {
+	retryCount int
+	topicName  string
 }
 
 type ConnectResponseEvent struct {
@@ -87,6 +90,11 @@ type ConnectResponseEvent struct {
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(ctx context.Context, config Config, sdkPos position.Topics) (*PubSubClient, error) {
+	sdk.Logger(ctx).Info().
+		Str("topics", strings.Join(config.TopicNames, ",")).
+		Str("topic", config.TopicName).
+		Msgf("Starting GRPC client")
+
 	var transportCreds credentials.TransportCredentials
 	var replayPreset proto.ReplayPreset
 
@@ -136,13 +144,14 @@ func NewGRPCClient(ctx context.Context, config Config, sdkPos position.Topics) (
 		sdkPos:       sdkPos,
 		oauth:        &oauth{Credentials: creds},
 		tomb:         t,
-		retryCount:   config.RetryCount,
 		maxRetries:   config.RetryCount,
 	}, nil
 }
 
 // Initializes the pubsub client by authenticating and.
 func (c *PubSubClient) Initialize(ctx context.Context) error {
+	sdk.Logger(ctx).Info().Msgf("Initizalizing PubSub client")
+
 	if err := c.login(ctx); err != nil {
 		return err
 	}
@@ -154,8 +163,10 @@ func (c *PubSubClient) Initialize(ctx context.Context) error {
 	for _, topic := range c.topicNames {
 		c.tomb.Go(func() error {
 			ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
-			c.startCDC(ctx, topic)
-			return nil
+			return c.startCDC(ctx, Topic{
+				topicName:  topic,
+				retryCount: c.maxRetries,
+			})
 		})
 	}
 
@@ -271,39 +282,35 @@ func (c *PubSubClient) Wait(ctx context.Context) error {
 	}
 }
 
-func (c *PubSubClient) ResetRetryCount() {
-	c.retryCount = c.maxRetries
-}
-
-func (c *PubSubClient) retryAuth(ctx context.Context, retry bool) (bool, error) {
+func (c *PubSubClient) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
 	var err error
-	sdk.Logger(ctx).Info().Msgf("retry connection - retries remaining %d ", c.retryCount)
-	c.retryCount--
+	sdk.Logger(ctx).Info().Msgf("retry connection on topic %s - retries remaining %d ", topic.topicName, topic.retryCount)
+	topic.retryCount--
 
-	if err = c.login(ctx); err != nil && c.retryCount <= 0 {
-		return retry, fmt.Errorf("failed to refresh auth: %w", err)
+	if err = c.login(ctx); err != nil && topic.retryCount <= 0 {
+		return retry, topic, fmt.Errorf("failed to refresh auth: %w", err)
 	} else if err != nil {
-		sdk.Logger(ctx).Info().Msgf("received error on login - retry - %d ", c.retryCount)
+		sdk.Logger(ctx).Info().Msgf("received error on login for topic %s - retry - %d : %v ", topic.topicName, topic.retryCount, err)
 		retry = true
-		return retry, fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount)
+		return retry, topic, fmt.Errorf("received error on subscribe for topic %s - retry - %d : %w", topic.topicName, topic.retryCount, err)
 	}
 
-	if err := c.canSubscribe(ctx); err != nil && c.retryCount <= 0 {
-		return retry, fmt.Errorf("failed to subscribe to client topic: %w", err)
+	if err := c.canSubscribe(ctx); err != nil && topic.retryCount <= 0 {
+		return retry, topic, fmt.Errorf("failed to subscribe to client topic %s: %w", topic.topicName, err)
 	} else if err != nil {
-		sdk.Logger(ctx).Info().Msgf("received error on subscribe - retry - %d ", c.retryCount)
+		sdk.Logger(ctx).Info().Msgf("received error on subscribe for topic %s - retry - %d : %v", topic.topicName, topic.retryCount, err)
 		retry = true
-		return retry, fmt.Errorf("received error on subscribe - retry - %d ", c.retryCount)
+		return retry, topic, fmt.Errorf("received error on subscribe for topic %s - retry - %d : %w ", topic.topicName, topic.retryCount, err)
 	}
 
 	retry = false
-	return retry, nil
+	return retry, topic, nil
 }
 
-func (c *PubSubClient) startCDC(ctx context.Context, topic string) error {
+func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 	sdk.Logger(ctx).Info().
-		Str("topic", topic).
-		Str("replayID", string(c.sdkPos.GetTopicReplayID(topic))).
+		Str("topic", topic.topicName).
+		Str("replayID", string(c.sdkPos.GetTopicReplayID(topic.topicName))).
 		Msg("starting CDC processing..")
 
 	var (
@@ -315,15 +322,18 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic string) error {
 	for {
 		if retry {
 			err := rt.Do(func() error {
-				retry, err = c.retryAuth(ctx, retry)
+				retry, topic, err = c.retryAuth(ctx, retry, topic)
 				return err
 			},
 				rt.Delay(RetryDelay),
-				rt.Attempts(uint(c.retryCount)),
+				rt.Attempts(uint(topic.retryCount)),
 			)
 			if err != nil {
-				return fmt.Errorf("error retrying (number of retries %d) auth - %s", c.retryCount, err)
+				return fmt.Errorf("error retrying (number of retries %d) for topic %s auth - %s", topic.retryCount, topic.topicName, err)
 			}
+
+			// once we are done with retries, reset the count
+			topic.retryCount = c.maxRetries
 		}
 
 		select {
@@ -331,30 +341,30 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic string) error {
 			return ctx.Err()
 		case <-c.ticker.C: // detect changes every polling period.
 
-			replayID := c.sdkPos.GetTopicReplayID(topic)
+			replayID := c.sdkPos.GetTopicReplayID(topic.topicName)
 
 			sdk.Logger(ctx).Debug().
 				Dur("elapsed", time.Since(lastRecvdAt)).
-				Str("topic", topic).
+				Str("topic", topic.topicName).
 				Str("replayID", base64.StdEncoding.EncodeToString(replayID)).
 				Msg("attempting to receive new events")
 
 			lastRecvdAt = time.Now().UTC()
 
-			events, err := c.Recv(ctx, topic, replayID)
+			events, err := c.Recv(ctx, topic.topicName, replayID)
 			if err != nil {
 				if c.invalidReplayIDErr(err) {
 					sdk.Logger(ctx).Error().Err(err).
-						Str("topic", topic).
+						Str("topic", topic.topicName).
 						Str("replayID", string(replayID)).
 						Msgf("replay id %s is invalid, retrying", string(replayID))
-					c.sdkPos.SetTopicReplayID(topic, nil)
+					c.sdkPos.SetTopicReplayID(topic.topicName, nil)
 					break
 				}
 
-				if c.retryCount > 0 {
+				if topic.retryCount > 0 {
 					sdk.Logger(ctx).Error().Err(err).
-						Str("topic", topic).
+						Str("topic", topic.topicName).
 						Str("replayID", string(replayID)).
 						Msg("retrying authentication")
 					retry = true
@@ -367,7 +377,7 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic string) error {
 			sdk.Logger(ctx).Debug().
 				Int("events", len(events)).
 				Dur("elapsed", time.Since(lastRecvdAt)).
-				Str("topic", topic).
+				Str("topic", topic.topicName).
 				Msg("received events")
 
 			for _, e := range events {
@@ -395,7 +405,6 @@ func (*PubSubClient) connErr(err error) bool {
 }
 
 func (c *PubSubClient) buildRecord(event ConnectResponseEvent) sdk.Record {
-
 	// TODO - ADD something here to distinguish creates, deletes, updates.
 
 	return sdk.Util.Source.NewRecordCreate(
