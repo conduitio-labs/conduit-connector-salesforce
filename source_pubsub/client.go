@@ -258,7 +258,6 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 // Stop ends CDC processing.
 func (c *PubSubClient) Stop(ctx context.Context) {
 	c.ticker.Stop()
-	_ = c.tomb.Killf("cdc iterator is stopping")
 
 	sdk.Logger(ctx).Debug().
 		Msgf("stopping pubsub client on topics %q", strings.Join(c.topicNames, ","))
