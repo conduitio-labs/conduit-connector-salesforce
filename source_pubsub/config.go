@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strings"
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -93,13 +92,7 @@ func (c Config) Validate(ctx context.Context) (Config, error) {
 	if len(c.TopicName) > 0 && len(c.TopicNames) == 0 {
 		sdk.Logger(ctx).Warn().Msg(`"TopicName" parameter is deprecated and will be removed, please use "TopicNames" instead.`)
 		// add the TopicName value to the TopicNames slice.
-		c.TopicNames = make([]string, 1)
-		c.TopicNames[0] = c.TopicName
-		sdk.Logger(ctx).Warn().
-			Str("topics", strings.Join(c.TopicNames, ",")).
-			Str("topic", c.TopicName).
-			Msg(`"TopicName" parameter is deprecated and will be removed, please use "TopicNames" instead.`)
-
+		c.TopicNames = []string{c.TopicName}
 	}
 
 	if len(c.TopicNames) == 0 {

@@ -19,7 +19,7 @@ type TopicPosition struct {
 	ReadTime time.Time `json:"readTime"`
 }
 
-func ParseSDKPosition(sdkPos sdk.Position) (Topics, error) {
+func ParseSDKPosition(sdkPos sdk.Position, topic string) (Topics, error) {
 	var p Topics
 	p.Topics = make(TopicPositions)
 
@@ -27,10 +27,18 @@ func ParseSDKPosition(sdkPos sdk.Position) (Topics, error) {
 		return p, nil
 	}
 
-	if err := json.Unmarshal(sdkPos, &p); err != nil {
-		return p, fmt.Errorf("invalid position: %w", err)
+	err := json.Unmarshal(sdkPos, &p)
+	if err != nil {
+		if topic == "" {
+			return p, fmt.Errorf("could not parsed sdk position %v: %w", sdkPos, err)
+		}
+
+		p.SetTopics([]string{topic})
+		err := p.SetTopicReplayID(topic, sdkPos)
+		return p, err
 	}
-	return p, nil
+
+	return p, err
 }
 
 func NewTopicPosition() Topics {
@@ -42,36 +50,35 @@ func NewTopicPosition() Topics {
 func (p Topics) SetTopics(topics []string) {
 	for _, topic := range topics {
 		if _, ok := p.Topics[topic]; !ok {
-			replayEvent := TopicPosition{
+			p.Topics[topic] = TopicPosition{
 				ReplayID: nil,
 			}
-			p.Topics[topic] = replayEvent
 		}
 	}
 }
 
-func (p Topics) GetTopicReplayID(topic string) []byte {
+func (p Topics) TopicReplayID(topic string) []byte {
 	if p.Topics != nil {
 		if _, ok := p.Topics[topic]; ok {
-			topicEvent := p.Topics[topic]
-			return topicEvent.ReplayID
+			return p.Topics[topic].ReplayID
 		}
 	}
 	return nil
 }
 
-func (p Topics) SetTopicReplayID(topic string, replayID []byte) {
+func (p Topics) SetTopicReplayID(topic string, replayID []byte) error {
 	if p.Topics != nil {
 		if _, ok := p.Topics[topic]; ok {
-			topicEvent := p.Topics[topic]
-			topicEvent.ReplayID = replayID
-			topicEvent.ReadTime = time.Now()
-			p.Topics[topic] = topicEvent
+			p.Topics[topic] = TopicPosition{
+				ReplayID: replayID,
+				ReadTime: time.Now(),
+			}
 		} else {
 			// should never be even reaching this point, something went wrong if we do
-			panic(fmt.Errorf("attempting to set replay id - %b on topic %s, topic doesn't exist on position", replayID, topic))
+			return fmt.Errorf("attempting to set replay id - %b on topic %s, topic doesn't exist on position", replayID, topic)
 		}
 	}
+	return nil
 }
 
 func (p Topics) ToSDKPosition() sdk.Position {

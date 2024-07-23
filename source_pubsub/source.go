@@ -78,18 +78,10 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 		Str("topics", strings.Join(s.config.TopicNames, ",")).
 		Msg("Open Source Connector")
 
-	parsedPositions, err = position.ParseSDKPosition(sdkPos)
+	parsedPositions, err = position.ParseSDKPosition(sdkPos, s.config.TopicName)
 
 	if err != nil {
-		//if using old config and the position isnt parsable
-		//assume its in the old position format
-		if len(s.config.TopicName) > 0 {
-			parsedPositions = position.NewTopicPosition()
-			parsedPositions.SetTopics(s.config.TopicNames)
-			parsedPositions.SetTopicReplayID(s.config.TopicName, sdkPos)
-		} else {
-			return fmt.Errorf("could not parsed sdk position %v", sdkPos)
-		}
+		return fmt.Errorf("error parsing sdk position: %w", err)
 	}
 
 	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
@@ -104,7 +96,7 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 	s.client = client
 
 	for _, t := range s.config.TopicNames {
-		p := parsedPositions.GetTopicReplayID(t)
+		p := parsedPositions.TopicReplayID(t)
 		logger.Debug().
 			Str("at", "source.open").
 			Str("position", string(p)).
