@@ -249,13 +249,13 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 	case <-ctx.Done():
 		return sdk.Record{}, fmt.Errorf("next: context done: %w", ctx.Err())
 	case event, ok := <-c.buffer:
-		record, err := c.buildRecord(event)
 		if !ok {
 			if err := c.tomb.Err(); err != nil {
 				return sdk.Record{}, fmt.Errorf("tomb exited: %w", err)
 			}
 			return sdk.Record{}, ErrEndOfRecords
 		}
+		record, err := c.buildRecord(event)
 		return record, err
 	}
 }
