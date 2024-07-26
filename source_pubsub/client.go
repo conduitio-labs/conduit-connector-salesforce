@@ -324,12 +324,13 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 	)
 
 	for {
+
 		sdk.Logger(ctx).Debug().
 			Str("topic", topic.topicName).
 			Str("replayID", string(topic.replayID)).
 			Bool("retry", retry).
 			Int("retry number", topic.retryCount).
-			Str("context", ctx.Err().Error()).
+			Err(ctx.Err()).
 			Msg("cdc loop")
 
 		if retry && ctx.Err() == nil {
