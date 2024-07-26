@@ -324,6 +324,14 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 	)
 
 	for {
+		sdk.Logger(ctx).Debug().
+			Str("topic", topic.topicName).
+			Str("replayID", string(topic.replayID)).
+			Bool("retry", retry).
+			Int("retry number", topic.retryCount).
+			Str("context", ctx.Err().Error()).
+			Msg("cdc loop")
+
 		if retry && ctx.Err() == nil {
 			err := rt.Do(func() error {
 				retry, topic, err = c.retryAuth(ctx, retry, topic)
@@ -354,20 +362,19 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 
 			events, err := c.Recv(ctx, topic.topicName, topic.replayID)
 			if err != nil {
-				if c.invalidReplayIDErr(err) {
-					sdk.Logger(ctx).Error().Err(err).
-						Str("topic", topic.topicName).
-						Str("replayID", string(topic.replayID)).
-						Msgf("replay id %s is invalid, retrying", string(topic.replayID))
-					topic.replayID = nil
-					break
-				}
+				sdk.Logger(ctx).Error().Err(err).
+					Str("topic", topic.topicName).
+					Str("replayID", string(topic.replayID)).
+					Msgf("received error on event receive: %v", err)
 
 				if topic.retryCount > 0 {
-					sdk.Logger(ctx).Error().Err(err).
-						Str("topic", topic.topicName).
-						Str("replayID", string(topic.replayID)).
-						Msg("retrying authentication")
+					if c.invalidReplayIDErr(err) {
+						sdk.Logger(ctx).Error().Err(err).
+							Str("topic", topic.topicName).
+							Str("replayID", string(topic.replayID)).
+							Msgf("replay id %s is invalid, retrying from preset", string(topic.replayID))
+						topic.replayID = nil
+					}
 					retry = true
 					break
 				}
@@ -478,6 +485,10 @@ func (c *PubSubClient) Subscribe(
 
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
 	if err != nil {
+		sdk.Logger(ctx).Error().Err(err).
+			Str("topic", topic).
+			Str("replayID", string(replayID)).
+			Msg("failed to subscribe to topic")
 		return nil, fmt.Errorf("failed to subscribe to topic %q: %w", topic, err)
 	}
 
