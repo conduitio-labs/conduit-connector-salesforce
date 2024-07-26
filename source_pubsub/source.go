@@ -18,7 +18,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/position"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
@@ -26,11 +28,9 @@ import (
 type client interface {
 	Next(context.Context) (sdk.Record, error)
 	Initialize(context.Context) error
-	ReplayID() []byte
 	Stop(context.Context)
 	Close(context.Context) error
 	Wait(context.Context) error
-	ResetRetryCount()
 }
 
 var _ client = (*PubSubClient)(nil)
@@ -49,20 +49,42 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 	return s.config.Parameters()
 }
 
-func (s *Source) Configure(_ context.Context, cfg map[string]string) error {
-	if err := sdk.Util.ParseConfig(cfg, &s.config); err != nil {
+func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
+	var config Config
+
+	if err := sdk.Util.ParseConfig(cfg, &config); err != nil {
 		return fmt.Errorf("failed to parse config - %s", err)
 	}
 
-	if err := s.config.Validate(); err != nil {
+	config, err := config.Validate(ctx)
+	if err != nil {
 		return fmt.Errorf("config failed to validate: %w", err)
 	}
+
+	s.config = config
 
 	return nil
 }
 
 func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
-	client, err := NewGRPCClient(ctx, s.config, sdkPos)
+	logger := sdk.Logger(ctx)
+	var parsedPositions position.Topics
+	var err error
+
+	logger.Debug().
+		Str("at", "source.open").
+		Str("position", base64.StdEncoding.EncodeToString(sdkPos)).
+		Str("topic", s.config.TopicName).
+		Str("topics", strings.Join(s.config.TopicNames, ",")).
+		Msg("Open Source Connector")
+
+	parsedPositions, err = position.ParseSDKPosition(sdkPos, s.config.TopicName)
+
+	if err != nil {
+		return fmt.Errorf("error parsing sdk position: %w", err)
+	}
+
+	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
@@ -73,12 +95,25 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 
 	s.client = client
 
+	for _, t := range s.config.TopicNames {
+		p := parsedPositions.TopicReplayID(t)
+		logger.Debug().
+			Str("at", "source.open").
+			Str("position", string(p)).
+			Str("position encoded", base64.StdEncoding.EncodeToString(p)).
+			Str("topic", t).
+			Msgf("Grpc Client has been set. Will begin read for topic: %s", t)
+	}
+
 	return nil
 }
 
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	logger := sdk.Logger(ctx)
-	s.client.ResetRetryCount()
+	logger.Debug().
+		Str("topic", s.config.TopicName).
+		Str("topics", strings.Join(s.config.TopicNames, ",")).
+		Msg("begin read")
 
 	r, err := s.client.Next(ctx)
 	if err != nil {
@@ -94,12 +129,16 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
-	// setting topic name as collection
-	r.Metadata.SetCollection(s.config.TopicName)
+	topic, err := r.Metadata.GetCollection()
+	if err != nil {
+		return sdk.Record{}, err
+	}
 
 	logger.Debug().
 		Str("at", "source.read").
-		Str("position", base64.StdEncoding.EncodeToString(r.Position)).
+		Str("position encoded", base64.StdEncoding.EncodeToString(r.Position)).
+		Str("position", string(r.Position)).
+		Str("record on topic", topic).
 		Msg("sending record")
 
 	return r, nil
@@ -108,6 +147,7 @@ func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 func (s *Source) Ack(ctx context.Context, pos sdk.Position) error {
 	sdk.Logger(ctx).Debug().
 		Str("at", "source.ack").
+		Str("uncoded position ", string(pos)).
 		Str("position", base64.StdEncoding.EncodeToString(pos)).
 		Msg("received ack")
 

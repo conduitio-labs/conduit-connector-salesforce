@@ -81,8 +81,13 @@ There may be need to reconnect while connector is working. Server returns condit
 | `oauthEndpoint`     | Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com ) |   | `true`  |
 | `clientId`        | OAuth Client ID (Consumer Key)           | `true`   |         |
 | `clientSecret`    | OAuth Client Secret (Consumer Secret)      | `true`   |         |
-| `username`        | Username.  | `true`   |         |
-| `topicName` | Event topic name for your event (e.g: /event/Accepted_Quote__e)   | `true`   |         |
+| `username`        | Username.  | `false`   |         |
+| `topicName` | (This will soon be depricated, please use topicNames) Event topic name for your event (e.g: /event/Accepted_Quote__e)   | `false`   |         |
+| `topicsNames`        | One or multiple comma separated topics names the source will subscribe to (e.g: /event/Test__e,/event/Test2__e).  | `false`   |         |
+| `retryCount`        | Number of times the connector will retry is the connection to a topic breaks.  | `false`   |    `10`     |
+| `replayPreset`        | The position from which connector will start reading events, either 'latest' or 'earliest'. Latest will pull only newly created events, and earlies will pull any events that are currently in the topic.  | `false`   |    `earliest`     |
+| `pollingPeriod`        | The client event polling interval between each data read on the topic. | `false`   |    `100ms`     |
+| `insecureSkipVerify`        | Disables certificate validation. | `false`   |   `false`      |
 
 
 ### Step-by-step configuration example
@@ -138,6 +143,13 @@ There are a couple of steps that need to be done to start working with Salesforc
     Make sure the user you are attaching to the application has "API ENABLED" permission set on their account. 
 
 5. Set up event: 
+
+6. Once done, You can begin with configuring the connector:
+    1. Set `oauthEndpount`, it should be a full url to your salesforce, (e.g: https://mysalesforce.salesforce.com ) 
+    2. Use Step 3 **Consumer Key** value as `clientId` config.
+    3. Use Step 3 **Consumer Secret** value as `clientSecret` config.
+    4. Set `topicNames` to either one or multiple event topic names the connector will subscribe to, should contain event in topic name such as `/event/Test__e`. 
+    5. Set any optional config fields as needed. 
 
 
 ## Testing

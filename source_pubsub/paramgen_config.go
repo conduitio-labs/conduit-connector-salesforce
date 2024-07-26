@@ -65,11 +65,15 @@ func (Config) Parameters() map[string]sdk.Parameter {
 		},
 		"topicName": {
 			Default:     "",
-			Description: "topicName is the topic the source connector will subscribe to",
+			Description: "topicName {WARN will be deprecated soon} the topicName the source connector will subscribe to",
 			Type:        sdk.ParameterTypeString,
-			Validations: []sdk.Validation{
-				sdk.ValidationRequired{},
-			},
+			Validations: []sdk.Validation{},
+		},
+		"topicNames": {
+			Default:     "",
+			Description: "topicNames are the topicNames the source connector will subscribe to",
+			Type:        sdk.ParameterTypeString,
+			Validations: []sdk.Validation{},
 		},
 		"username": {
 			Default:     "",
