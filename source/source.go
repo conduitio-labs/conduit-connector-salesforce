@@ -25,6 +25,8 @@ import (
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd"
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth"
+	"github.com/conduitio/conduit-commons/config"
+	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"gopkg.in/tomb.v2"
 )
@@ -54,51 +56,53 @@ func NewSource() sdk.Source {
 	}
 }
 
-func (s *Source) Parameters() map[string]sdk.Parameter {
-	return map[string]sdk.Parameter{
+func (s *Source) Parameters() config.Parameters {
+	return map[string]config.Parameter{
 		ConfigKeyEnvironment: {
-			Default:     "",
-			Required:    true,
 			Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
-		},
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			}},
 		ConfigKeyClientID: {
-			Default:     "",
-			Required:    true,
 			Description: "OAuth Client ID (Consumer Key).",
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 		ConfigKeyClientSecret: {
-			Default:     "",
-			Required:    true,
 			Description: "OAuth Client Secret (Consumer Secret).",
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 		ConfigKeyUsername: {
-			Default:     "",
-			Required:    true,
 			Description: "Username.",
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 		ConfigKeyPassword: {
-			Default:     "",
-			Required:    true,
 			Description: "Password.",
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 		ConfigKeySecurityToken: {
-			Default:     "",
-			Required:    false,
 			Description: "Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.",
 		},
 		ConfigKeyPushTopicsNames: {
-			Default:     "",
-			Required:    true,
 			Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 		ConfigKeyKeyField: {
 			Default:     "Id",
-			Required:    false,
 			Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
 		},
 	}
 }
-func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err error) {
+func (s *Source) Configure(_ context.Context, cfgRaw config.Config) (err error) {
 	s.config, err = ParseConfig(cfgRaw)
 	if err != nil {
 		return fmt.Errorf("configuration error: %w", err)
@@ -107,7 +111,7 @@ func (s *Source) Configure(_ context.Context, cfgRaw map[string]string) (err err
 	return nil
 }
 
-func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
+func (s *Source) Open(ctx context.Context, _ opencdc.Position) error {
 	// Authenticate
 	oAuthClient := OAuthClientFactory(
 		s.config.Environment,
@@ -160,20 +164,20 @@ func (s *Source) Open(ctx context.Context, _ sdk.Position) error {
 	return nil
 }
 
-func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
+func (s *Source) Read(ctx context.Context) (opencdc.Record, error) {
 	if s.tomb == nil {
-		return sdk.Record{}, ErrConnectorIsStopped
+		return opencdc.Record{}, ErrConnectorIsStopped
 	}
 
 	select {
 	case event, ok := <-s.events:
 		if !ok {
-			return sdk.Record{}, fmt.Errorf("connection closed by the server")
+			return opencdc.Record{}, fmt.Errorf("connection closed by the server")
 		}
 
 		keyValue, err := s.getKeyValue(event)
 		if err != nil {
-			return sdk.Record{}, err
+			return opencdc.Record{}, err
 		}
 
 		replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
@@ -181,26 +185,27 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		switch event.Data.Event.Type {
 		case responses.CreatedEventType:
 			return sdk.SourceUtil{}.NewRecordCreate(
-				sdk.Position(replayID),
+				opencdc.Position(replayID),
 				s.getMetadata(event),
 				keyValue,
-				sdk.StructuredData(event.Data.SObject),
+				opencdc.StructuredData(event.Data.SObject),
 			), nil
 
 		case responses.UpdatedEventType, responses.UndeletedEventType:
 			return sdk.SourceUtil{}.NewRecordUpdate(
-				sdk.Position(replayID),
+				opencdc.Position(replayID),
 				s.getMetadata(event),
 				keyValue,
 				nil,
-				sdk.StructuredData(event.Data.SObject),
+				opencdc.StructuredData(event.Data.SObject),
 			), nil
 
 		case responses.DeletedEventType:
 			return sdk.SourceUtil{}.NewRecordDelete(
-				sdk.Position(replayID),
+				opencdc.Position(replayID),
 				s.getMetadata(event),
 				keyValue,
+				nil,
 			), nil
 
 		default:
@@ -210,10 +215,10 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 				internal.OperationInsert,
 			)
 			return sdk.SourceUtil{}.NewRecordCreate(
-				sdk.Position(replayID),
+				opencdc.Position(replayID),
 				s.getMetadata(event),
 				keyValue,
-				sdk.StructuredData(event.Data.SObject),
+				opencdc.StructuredData(event.Data.SObject),
 			), nil
 		}
 
@@ -223,17 +228,17 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 			err = ErrConnectorIsStopped
 		}
 
-		return sdk.Record{}, err
+		return opencdc.Record{}, err
 
 	case <-ctx.Done():
-		return sdk.Record{}, ctx.Err()
+		return opencdc.Record{}, ctx.Err()
 	}
 }
 
 func (s *Source) getMetadata(event responses.ConnectResponseEvent) map[string]string {
 	replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
 
-	m := sdk.Metadata{
+	m := opencdc.Metadata{
 		"channel":  event.Channel,
 		"replayId": replayID,
 	}
@@ -241,7 +246,7 @@ func (s *Source) getMetadata(event responses.ConnectResponseEvent) map[string]st
 	return m
 }
 
-func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
+func (s *Source) Ack(ctx context.Context, position opencdc.Position) error {
 	sdk.Logger(ctx).Debug().Str("position", string(position)).Msg("got ack")
 
 	return nil // no ack needed
@@ -351,7 +356,7 @@ func (s *Source) eventsWorker() error {
 					// Send out the record if possible
 					select {
 					case s.events <- event:
-						// sdk.Record was sent successfully
+						// opencdc.Record was sent successfully
 
 					case <-s.tomb.Dying():
 						return s.tomb.Err()
@@ -365,7 +370,7 @@ func (s *Source) eventsWorker() error {
 }
 
 // getKeyValue prepares the Key value for Payload.
-func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData, error) {
+func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (opencdc.RawData, error) {
 	if s.config.KeyField == "" {
 		return nil, nil
 	}
@@ -377,14 +382,14 @@ func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (sdk.RawData,
 
 	switch v := value.(type) {
 	case string:
-		return sdk.RawData(v), nil
+		return opencdc.RawData(v), nil
 
 	case int, int8, int16, int32, int64,
 		uint, uint8, uint16, uint32, uint64:
-		return sdk.RawData(fmt.Sprintf("%d", v)), nil
+		return opencdc.RawData(fmt.Sprintf("%d", v)), nil
 
 	case float32, float64:
-		return sdk.RawData(fmt.Sprintf("%G", v)), nil
+		return opencdc.RawData(fmt.Sprintf("%G", v)), nil
 	}
 
 	return nil, fmt.Errorf("the %T type of Key field is not supported", value)

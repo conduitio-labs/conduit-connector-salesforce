@@ -19,16 +19,16 @@ import (
 	"sync"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
-	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/conduitio/conduit-commons/opencdc"
 )
 
 type streamingClientMock struct {
-	results   []sdk.Record
+	results   []opencdc.Record
 	lastIndex int
 	mutex     sync.Mutex
 }
 
-func (s *streamingClientMock) SetResults(results []sdk.Record) {
+func (s *streamingClientMock) SetResults(results []opencdc.Record) {
 	s.mutex.Lock()
 	s.results = results
 	s.mutex.Unlock()
@@ -55,7 +55,7 @@ func (s *streamingClientMock) Connect(_ context.Context) (responses.ConnectRespo
 				Event: responses.ConnectResponseEventDataMetadata{
 					ReplayID: s.lastIndex,
 				},
-				SObject: record.Payload.After.(sdk.StructuredData),
+				SObject: record.Payload.After.(opencdc.StructuredData),
 			},
 			Channel: "MyTopic1",
 		})
