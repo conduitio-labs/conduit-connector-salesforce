@@ -37,7 +37,7 @@ For more information about how to create Push Topics go to step-by-step configur
 
 ##### The generated payload
 
-Connector produces [`sdk.StructuredData`](https://github.com/ConduitIO/conduit-connector-sdk/blob/main/record.go) data type with information from the received event. The payload entirely depends on the Push Topic's query.
+Connector produces [`opencdc.StructuredData`](https://github.com/ConduitIO/conduit-commons/blob/main/opencdc/record.go) data type with information from the received event. The payload entirely depends on the Push Topic's query.
 The following data is included:
 - `Key` - either `nil` when not configured or the value of payload's `keyField` field.
 - `Payload` - Salesforce Push Topic query result; a decoded JSON value.
