@@ -93,8 +93,7 @@ type ConnectResponseEvent struct {
 // Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(ctx context.Context, config Config, currentPos position.Topics) (*PubSubClient, error) {
 	sdk.Logger(ctx).Info().
-		Str("topics", strings.Join(config.TopicNames, ",")).
-		Str("topic", config.TopicName).
+		Strs("topics", config.TopicNames).
 		Msgf("Starting GRPC client")
 
 	var transportCreds credentials.TransportCredentials
@@ -207,7 +206,7 @@ func (c *PubSubClient) login(ctx context.Context) error {
 		Str("instance_url", c.instanceURL).
 		Str("user_id", c.userID).
 		Str("org_id", c.orgID).
-		Str("topic", strings.Join(c.topicNames, ",")).
+		Strs("topics", c.topicNames).
 		Msg("successfully authenticated")
 
 	return nil
@@ -236,7 +235,7 @@ func (c *PubSubClient) canSubscribe(_ context.Context) error {
 
 		sdk.Logger(ctx).Debug().
 			Bool("can_subscribe", resp.CanSubscribe).
-			Str("topic_name", resp.TopicName).
+			Str("topic", resp.TopicName).
 			Msgf("client allowed to subscribe to events on %q", topic)
 	}
 
@@ -255,8 +254,7 @@ func (c *PubSubClient) Next(ctx context.Context) (sdk.Record, error) {
 			}
 			return sdk.Record{}, ErrEndOfRecords
 		}
-		record, err := c.buildRecord(event)
-		return record, err
+		return c.buildRecord(event)
 	}
 }
 
@@ -324,7 +322,6 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 	)
 
 	for {
-
 		sdk.Logger(ctx).Debug().
 			Str("topic", topic.topicName).
 			Str("replayID", string(topic.replayID)).
