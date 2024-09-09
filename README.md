@@ -82,8 +82,8 @@ There may be need to reconnect while connector is working. Server returns condit
 | `clientId`        | OAuth Client ID (Consumer Key)           | `true`   |         |
 | `clientSecret`    | OAuth Client Secret (Consumer Secret)      | `true`   |         |
 | `username`        | Username.  | `false`   |         |
-| ~~~`topicName`~~~ | Event topic name for your event (e.g: /event/Accepted_Quote__e) **Deprecated: use `topicNames` instead***  |	|         |
-| `topicsNames`        | One or multiple comma separated topic names the source will subscribe to (e.g: /event/Test__e,/event/Test2__e).  |    |         |
+| ~~`topicName`~~ | Event topic name for your event (e.g: /event/Accepted_Quote__e) **Deprecated: use `topicNames` instead**  |	`false` ||
+| `topicsNames`        | One or multiple comma separated topic names the source will subscribe to (e.g */event/Test__e, /event/Test2__e*).  | `true`   ||
 | `retryCount`        | Number of times the connector will retry is the connection to a topic breaks.  | `false`   |    `10`     |
 | `replayPreset`        | The position from which connector will start reading events, either 'latest' or 'earliest'. Latest will pull only newly created events, and earlies will pull any events that are currently in the topic.  | `false`   |    `earliest`     |
 | `pollingPeriod`        | The client event polling interval between each data read on the topic. | `false`   |    `100ms`     |
