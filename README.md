@@ -60,7 +60,7 @@ There may be need to reconnect while connector is working. Server returns condit
 
 ### Configuration Options
 
-## Destination 
+## Destination
 
 | name              | description                                                                                                                                                                                                                                    | required | default |
 |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
@@ -82,8 +82,8 @@ There may be need to reconnect while connector is working. Server returns condit
 | `clientId`        | OAuth Client ID (Consumer Key)           | `true`   |         |
 | `clientSecret`    | OAuth Client Secret (Consumer Secret)      | `true`   |         |
 | `username`        | Username.  | `false`   |         |
-| `topicName` | (This will soon be depricated, please use topicNames) Event topic name for your event (e.g: /event/Accepted_Quote__e)   | `false`   |         |
-| `topicsNames`        | One or multiple comma separated topics names the source will subscribe to (e.g: /event/Test__e,/event/Test2__e).  | `false`   |         |
+| `topicName` | (This will soon be deprecated, please use `topicNames` instead) Event topic name for your event (e.g: /event/Accepted_Quote__e)   |	|         |
+| `topicsNames`        | One or multiple comma separated topic names the source will subscribe to (e.g: /event/Test__e,/event/Test2__e).  |    |         |
 | `retryCount`        | Number of times the connector will retry is the connection to a topic breaks.  | `false`   |    `10`     |
 | `replayPreset`        | The position from which connector will start reading events, either 'latest' or 'earliest'. Latest will pull only newly created events, and earlies will pull any events that are currently in the topic.  | `false`   |    `earliest`     |
 | `pollingPeriod`        | The client event polling interval between each data read on the topic. | `false`   |    `100ms`     |
@@ -126,7 +126,7 @@ There are a couple of steps that need to be done to start working with Salesforc
 
         Later, this may be utilized by other connectors, e.g. [Elasticsearch connector](https://github.com/conduitio-labs/conduit-connector-elasticsearch) will create Document with ID of Record's Key when available.
 
-## Source 
+## Source
 
 1. Log in into Your Salesforce account, e.g. https://my-demo-app.my.salesforce.com. The environment is `my-demo-app`.
 2. First, if not already done, You need to create connected app and enable OAuth: [Enable OAuth Settings for API Integration](https://help.salesforce.com/s/articleView?id=sf.connected_app_create_api_integration.htm&type=5).
@@ -139,17 +139,17 @@ There are a couple of steps that need to be done to start working with Salesforc
 3. Copy **Consumer Key** and **Consumer Secret**. If You need these values once again You can always find them in _Setup -> Apps -> App Manager_, find app on the list and choose _View_ option.
     ![View OAuth tokens](docs/view_oauth_tokens.png)
 
-4. You will need to set following settings on the application, refer to ![OAuth Client Credentials Flow Requirements](https://help.salesforce.com/s/articleView?id=sf.connected_app_client_credentials_setup.htm&type=5) . 
-    Make sure the user you are attaching to the application has "API ENABLED" permission set on their account. 
+4. You will need to set following settings on the application, refer to ![OAuth Client Credentials Flow Requirements](https://help.salesforce.com/s/articleView?id=sf.connected_app_client_credentials_setup.htm&type=5) .
+    Make sure the user you are attaching to the application has "API ENABLED" permission set on their account.
 
-5. Set up event: 
+5. Set up event:
 
 6. Once done, You can begin with configuring the connector:
-    1. Set `oauthEndpount`, it should be a full url to your salesforce, (e.g: https://mysalesforce.salesforce.com ) 
+    1. Set `oauthEndpount`, it should be a full url to your salesforce, (e.g: https://mysalesforce.salesforce.com )
     2. Use Step 3 **Consumer Key** value as `clientId` config.
     3. Use Step 3 **Consumer Secret** value as `clientSecret` config.
-    4. Set `topicNames` to either one or multiple event topic names the connector will subscribe to, should contain event in topic name such as `/event/Test__e`. 
-    5. Set any optional config fields as needed. 
+    4. Set `topicNames` to either one or multiple event topic names the connector will subscribe to, should contain event in topic name such as `/event/Test__e`.
+    5. Set any optional config fields as needed.
 
 
 ## Testing
