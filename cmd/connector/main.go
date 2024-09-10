@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2022 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,14 +16,14 @@ package main
 
 import (
 	sf "github.com/conduitio-labs/conduit-connector-salesforce"
-	sfSource "github.com/conduitio-labs/conduit-connector-salesforce/source"
+	sfSourcePubsub "github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 func main() {
 	sdk.Serve(sdk.Connector{
 		NewSpecification: sf.Specification,
-		NewSource:        sfSource.NewSource,
+		NewSource:        sfSourcePubsub.NewSource,
 		NewDestination:   nil,
 	})
 }

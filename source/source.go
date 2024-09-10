@@ -33,8 +33,10 @@ import (
 
 const sfCometDVersion = "54.0"
 
-var OAuthClientFactory = oauth.NewDefaultClient
-var StreamingClientFactory = cometd.NewDefaultClient
+var (
+	OAuthClientFactory     = oauth.NewDefaultClient
+	StreamingClientFactory = cometd.NewDefaultClient
+)
 
 var ErrConnectorIsStopped = errors.New("connector is stopped")
 
@@ -62,7 +64,8 @@ func (s *Source) Parameters() config.Parameters {
 			Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
 			Validations: []config.Validation{
 				config.ValidationRequired{},
-			}},
+			},
+		},
 		ConfigKeyClientID: {
 			Description: "OAuth Client ID (Consumer Key).",
 			Validations: []config.Validation{
@@ -102,6 +105,7 @@ func (s *Source) Parameters() config.Parameters {
 		},
 	}
 }
+
 func (s *Source) Configure(_ context.Context, cfgRaw config.Config) (err error) {
 	s.config, err = ParseConfig(cfgRaw)
 	if err != nil {

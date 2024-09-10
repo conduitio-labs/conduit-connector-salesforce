@@ -36,7 +36,7 @@ const (
 	testLoginURI = "https://test.salesforce.com/services/oauth2/token"
 )
 
-//go:generate moq -out client_moq_test.go . Client
+// skip go:generate moq -out client_moq_test.go . Client.
 type Client interface {
 	Authenticate(ctx context.Context) (response.TokenResponse, error)
 }
@@ -70,7 +70,7 @@ type DefaultClient struct {
 	securityToken string
 }
 
-//go:generate moq -out http_client_moq_test.go . httpClient
+// skip go:generate moq -out http_client_moq_test.go . httpClient.
 type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }

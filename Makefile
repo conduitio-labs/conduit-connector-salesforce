@@ -1,4 +1,4 @@
-.PHONY: build test lint
+.PHONY: build test lint fmt proto
 
 VERSION=$(shell git describe --tags --dirty --always)
 
@@ -8,8 +8,20 @@ build:
 test:
 	go test $(GOTEST_FLAGS) -race ./...
 
+fmt:
+	gofumpt -l -w .
+	gci write --skip-generated  .
+
 lint:
-	golangci-lint run
+	golangci-lint run -v
+
+proto:
+	cd proto && buf generate
+
+generate:
+	go generate ./...
+	mockery
+
 
 .PHONY: install-tools
 install-tools:

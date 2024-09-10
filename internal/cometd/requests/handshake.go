@@ -18,8 +18,7 @@ import "encoding/json"
 
 // HandshakeRequest represents handshake request.
 // See: https://docs.cometd.org/current7/reference/#_handshake_request
-type HandshakeRequest struct {
-}
+type HandshakeRequest struct{}
 
 func (r HandshakeRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
