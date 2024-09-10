@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"strings"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/position"
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -53,7 +52,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	var config Config
 
 	if err := sdk.Util.ParseConfig(cfg, &config); err != nil {
-		return fmt.Errorf("failed to parse config - %s", err)
+		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
 	config, err := config.Validate(ctx)
@@ -68,17 +67,16 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 
 func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 	logger := sdk.Logger(ctx)
+
 	var parsedPositions position.Topics
-	var err error
 
 	logger.Debug().
 		Str("at", "source.open").
 		Str("position", base64.StdEncoding.EncodeToString(sdkPos)).
-		Str("topic", s.config.TopicName).
-		Str("topics", strings.Join(s.config.TopicNames, ",")).
+		Strs("topics", s.config.TopicNames).
 		Msg("Open Source Connector")
 
-	parsedPositions, err = position.ParseSDKPosition(sdkPos, s.config.TopicName)
+	parsedPositions, err := position.ParseSDKPosition(sdkPos, s.config.TopicName)
 	if err != nil {
 		return fmt.Errorf("error parsing sdk position: %w", err)
 	}
@@ -110,19 +108,18 @@ func (s *Source) Open(ctx context.Context, sdkPos sdk.Position) error {
 func (s *Source) Read(ctx context.Context) (rec sdk.Record, err error) {
 	logger := sdk.Logger(ctx)
 	logger.Debug().
-		Str("topic", s.config.TopicName).
-		Str("topics", strings.Join(s.config.TopicNames, ",")).
+		Strs("topics", s.config.TopicNames).
 		Msg("begin read")
 
 	r, err := s.client.Next(ctx)
 	if err != nil {
-		sdk.Logger(ctx).Error().Err(err).Msg("next: failed to get next record")
-		return sdk.Record{}, err
+		return sdk.Record{}, fmt.Errorf("failed to get next record: %w", err)
 	}
 
 	// filter out empty record payloads
 	if r.Payload.Before == nil && r.Payload.After == nil {
-		logger.Error().Str("record", fmt.Sprintf("%+v", r)).
+		logger.Error().
+			Interface("record", r).
 			Msg("backing off, empty record payload detected")
 
 		return sdk.Record{}, sdk.ErrBackoffRetry
