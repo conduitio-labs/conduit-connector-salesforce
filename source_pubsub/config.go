@@ -15,11 +15,15 @@
 package source
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"time"
+
+	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 //go:generate paramgen -output=paramgen_config.go Config
@@ -34,8 +38,11 @@ type Config struct {
 	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
 	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
 
-	// TopicName is the topic the source connector will subscribe to
-	TopicName string `json:"topicName" validate:"required"`
+	// TopicName {WARN will be deprecated soon} the TopicName the source connector will subscribe to
+	TopicName string `json:"topicName"`
+
+	// TopicNames are the TopicNames the source connector will subscribe to
+	TopicNames []string `json:"topicNames" validate:"required"`
 
 	// Deprecated: Username is the client secret from the salesforce app.
 	Username string `json:"username"`
@@ -47,17 +54,32 @@ type Config struct {
 	PubsubAddress string `json:"pubsubAddress" default:"api.pubsub.salesforce.com:7443"`
 
 	// InsecureSkipVerify disables certificate validation
-	InsecureSkipVerify bool `json:"insecureSkipVerify"`
+	InsecureSkipVerify bool `json:"insecureSkipVerify" default:"false"`
 
 	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
 	ReplayPreset string `json:"replayPreset" default:"earliest"`
+
 	// Number of retries allowed per read before the connector errors out
 	RetryCount int `json:"retryCount" default:"10"`
 }
 
-func (c Config) Validate() error {
+func (c Config) Validate(ctx context.Context) (Config, error) {
 	var errs []error
 
+	// Warn about deprecated fields
+	if c.Username != "" {
+		sdk.Logger(ctx).Warn().
+			Msg(`"username" is deprecated, use "clientID" and "clientSecret"`)
+	}
+
+	if c.TopicName != "" {
+		sdk.Logger(ctx).Warn().
+			Msg(`"topicName" is deprecated, use "topicNames" instead.`)
+
+		c.TopicNames = slices.Compact(append(c.TopicNames, c.TopicName))
+	}
+
+	// Validate provided fields
 	if c.ClientID == "" {
 		errs = append(errs, fmt.Errorf("invalid client id %q", c.ClientID))
 	}
@@ -70,14 +92,8 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf("invalid oauth endpoint %q", c.OAuthEndpoint))
 	}
 
-	if c.OAuthEndpoint != "" {
-		if _, err := url.Parse(c.OAuthEndpoint); err != nil {
-			errs = append(errs, fmt.Errorf("failed to parse oauth endpoint url: %w", err))
-		}
-	}
-
-	if c.TopicName == "" {
-		errs = append(errs, fmt.Errorf("invalid topic name %q", c.TopicName))
+	if len(c.TopicNames) == 0 {
+		errs = append(errs, fmt.Errorf("invalid TopicName name %q", c.TopicNames))
 	}
 
 	if c.PollingPeriod == 0 {
@@ -88,11 +104,17 @@ func (c Config) Validate() error {
 		errs = append(errs, fmt.Errorf("invalid pubsub address %q", c.OAuthEndpoint))
 	}
 
-	if c.PubsubAddress != "" {
-		if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {
-			errs = append(errs, fmt.Errorf("failed to parse pubsub address: %w", err))
-		}
+	if len(errs) != 0 {
+		return c, errors.Join(errs...)
 	}
 
-	return errors.Join(errs...)
+	if _, err := url.Parse(c.OAuthEndpoint); err != nil {
+		return c, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
+	}
+
+	if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {
+		return c, fmt.Errorf("failed to parse pubsub address: %w", err)
+	}
+
+	return c, nil
 }
