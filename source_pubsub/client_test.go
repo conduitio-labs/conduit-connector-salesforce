@@ -14,72 +14,61 @@
 
 package source
 
-/*
 import (
-	"testing"
 	"context"
+	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
 	"github.com/stretchr/testify/mock"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/mocks"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/tomb.v2"
 )
 
 func TestPubSubClient_Initialize(t *testing.T) {
 	mockAuth := newMockAuthenticator(t)
+	ctx, cancel := context.WithCancel(context.Background())
 
-	mockAuth.EXPECT().Login(Credentials{
-		ClientID: "some-id",
-		ClientSecret: "some-secret",
-		OAuthEndpoint: "oauth-endpoint",
-	}).Return(&LoginResponse{AccessToken: "token", InstanceURL: "instance-url"}, nil)
+	mockAuth.EXPECT().
+		Login().
+		Return(&LoginResponse{AccessToken: "token", InstanceURL: "instance-url"}, nil)
 
-	mockAuth.EXPECT().UserInfo("oauth-endpoint", "token").Return(
-		&UserInfoResponse{UserID: "my-user-id", OrganizationID: "org-id"},
-		nil,
-	)
+	mockAuth.EXPECT().
+		UserInfo("token").
+		Return(
+			&UserInfoResponse{UserID: "my-user-id", OrganizationID: "org-id"},
+			nil,
+		)
 
-	mockPubSubClient := mocks.NewPubSubClient(t)
+	mockPubSubClient := newMockPubSubClient(t)
 
 	mockPubSubClient.EXPECT().GetTopic(
 		mock.Anything,
-		&proto.TopicRequest{TopicName: "my-topic"},
+		&eventbusv1.TopicRequest{TopicName: "my-topic"},
 		mock.Anything,
 	).Return(
-		&proto.TopicInfo{TopicName: "my-topic", CanSubscribe: true},
+		&eventbusv1.TopicInfo{TopicName: "my-topic", CanSubscribe: true},
 		nil,
 	)
 
+	tt, _ := tomb.WithContext(ctx)
+
 	c := &PubSubClient{
-		oauth: mockAuth,
+		oauth:        mockAuth,
 		pubSubClient: mockPubSubClient,
+		tomb:         tt,
+		buffer:       make(chan ConnectResponseEvent),
+		topicNames:   []string{"my-topic"},
+		ticker:       time.NewTicker(time.Second * 1),
 	}
 
-	err := c.Initialize(context.Background(), Config{
-		ClientID: "some-id",
-		ClientSecret: "some-secret",
-		OAuthEndpoint: "oauth-endpoint",
-		TopicName: "my-topic",
-		PollingPeriod: time.Minute*1,
-	})
-	require.NoError(t, err)
+	require.NoError(t, c.Initialize(ctx))
 	require.True(t, c.tomb.Alive())
 
-	// reinit again after stop
-	c.Stop()
-	err = c.Wait(context.Background())
+	c.Stop(ctx)
+	cancel()
+	err := c.Wait(context.Background())
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "cdc iterator is stopping")
-
-	err = c.Initialize(context.Background(), Config{
-		ClientID: "some-id",
-		ClientSecret: "some-secret",
-		OAuthEndpoint: "oauth-endpoint",
-		TopicName: "my-topic",
-	})
-	t.Cleanup(func(){ c.Stop() })
-	require.NoError(t, err)
-	require.True(t, c.tomb.Alive())
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, c.tomb.Wait(), context.Canceled)
 }
-*/

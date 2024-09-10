@@ -27,8 +27,8 @@ import (
 	"time"
 
 	rt "github.com/avast/retry-go/v4"
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/position"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/linkedin/goavro/v2"
@@ -39,11 +39,7 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
-//go:generate mockery --with-expecter --filename pubsub_client_mock.go --name PubSubClient --dir proto --log-level error
-//go:generate mockery --with-expecter --filename pubsub_subscribe_client_mock.go --name PubSub_SubscribeClient --dir proto --log-level error
-
 var (
-	GRPCDialTimeout = 5 * time.Second
 	GRPCCallTimeout = 5 * time.Second
 	RetryDelay      = 10 * time.Second
 )
@@ -57,12 +53,12 @@ type PubSubClient struct {
 	instanceURL  string
 	userID       string
 	orgID        string
-	replayPreset proto.ReplayPreset
+	replayPreset eventbusv1.ReplayPreset
 
 	oauth authenticator
 
 	conn         *grpc.ClientConn
-	pubSubClient proto.PubSubClient
+	pubSubClient eventbusv1.PubSubClient
 
 	codecCache  map[string]*goavro.Codec
 	unionFields map[string]map[string]struct{}
@@ -98,7 +94,7 @@ func NewGRPCClient(ctx context.Context, config Config, currentPos position.Topic
 		Msgf("Starting GRPC client")
 
 	var transportCreds credentials.TransportCredentials
-	var replayPreset proto.ReplayPreset
+	var replayPreset eventbusv1.ReplayPreset
 
 	if config.InsecureSkipVerify {
 		transportCreds = insecure.NewCredentials()
@@ -123,16 +119,16 @@ func NewGRPCClient(ctx context.Context, config Config, currentPos position.Topic
 	t, _ := tomb.WithContext(ctx)
 
 	if config.ReplayPreset == "latest" {
-		replayPreset = proto.ReplayPreset_LATEST
+		replayPreset = eventbusv1.ReplayPreset_LATEST
 	} else {
-		replayPreset = proto.ReplayPreset_EARLIEST
+		replayPreset = eventbusv1.ReplayPreset_EARLIEST
 	}
 
 	currentPos.SetTopics(config.TopicNames)
 
 	return &PubSubClient{
 		conn:         conn,
-		pubSubClient: proto.NewPubSubClient(conn),
+		pubSubClient: eventbusv1.NewPubSubClient(conn),
 		codecCache:   make(map[string]*goavro.Codec),
 		unionFields:  make(map[string]map[string]struct{}),
 		replayPreset: replayPreset,
@@ -173,7 +169,7 @@ func (c *PubSubClient) Initialize(ctx context.Context) error {
 	go func() {
 		<-c.tomb.Dead()
 
-		sdk.Logger(ctx).Info().Err(c.tomb.Err()).Msgf("tomb died, closing buffer")
+		sdk.Logger(ctx).Info().Err(c.tomb.Err()).Msg("tomb died, closing buffer")
 		close(c.buffer)
 	}()
 
@@ -214,7 +210,7 @@ func (c *PubSubClient) canSubscribe(_ context.Context) error {
 	var trailer metadata.MD
 
 	for _, topic := range c.topicNames {
-		req := &proto.TopicRequest{
+		req := &eventbusv1.TopicRequest{
 			TopicName: topic,
 		}
 
@@ -448,10 +444,10 @@ func (c *PubSubClient) Close(ctx context.Context) error {
 }
 
 // Wrapper function around the GetSchema RPC. This will add the OAuth credentials and make a call to fetch data about a specific schema.
-func (c *PubSubClient) GetSchema(schemaID string) (*proto.SchemaInfo, error) {
+func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 	var trailer metadata.MD
 
-	req := &proto.SchemaRequest{
+	req := &eventbusv1.SchemaRequest{
 		SchemaId: schemaID,
 	}
 
@@ -472,10 +468,10 @@ func (c *PubSubClient) GetSchema(schemaID string) (*proto.SchemaInfo, error) {
 // the same replayID that it originally received as a parameter.
 func (c *PubSubClient) Subscribe(
 	ctx context.Context,
-	replayPreset proto.ReplayPreset,
+	replayPreset eventbusv1.ReplayPreset,
 	replayID []byte,
 	topic string,
-) (proto.PubSub_SubscribeClient, error) {
+) (eventbusv1.PubSub_SubscribeClient, error) {
 	start := time.Now().UTC()
 
 	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
@@ -489,18 +485,18 @@ func (c *PubSubClient) Subscribe(
 
 	sdk.Logger(ctx).Debug().
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
-		Str("replay_preset", proto.ReplayPreset_name[int32(replayPreset)]).
+		Str("replay_preset", eventbusv1.ReplayPreset_name[int32(replayPreset)]).
 		Str("topic_name", topic).
 		Dur("elapsed", time.Since(start)).
 		Msgf("subscribed to %q", topic)
 
-	initialFetchRequest := &proto.FetchRequest{
+	initialFetchRequest := &eventbusv1.FetchRequest{
 		TopicName:    topic,
 		ReplayPreset: replayPreset,
 		NumRequested: 1,
 	}
 
-	if replayPreset == proto.ReplayPreset_CUSTOM && len(replayID) > 0 {
+	if replayPreset == eventbusv1.ReplayPreset_CUSTOM && len(replayID) > 0 {
 		initialFetchRequest.ReplayId = replayID
 	}
 
@@ -514,7 +510,7 @@ func (c *PubSubClient) Subscribe(
 
 	sdk.Logger(ctx).Debug().
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
-		Str("replay_preset", proto.ReplayPreset_name[int32(replayPreset)]).
+		Str("replay_preset", eventbusv1.ReplayPreset_name[int32(replayPreset)]).
 		Str("topic_name", topic).
 		Dur("elapsed", time.Since(start)).
 		Msg("first request sent")
@@ -529,7 +525,7 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 	)
 
 	if len(replayID) > 0 {
-		preset = proto.ReplayPreset_CUSTOM
+		preset = eventbusv1.ReplayPreset_CUSTOM
 	}
 
 	sdk.Logger(ctx).Info().

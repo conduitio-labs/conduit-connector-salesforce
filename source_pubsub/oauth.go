@@ -24,7 +24,6 @@ import (
 	"time"
 )
 
-//go:generate mockery --with-expecter --name=authenticator --inpackage --log-level error
 type authenticator interface {
 	Login() (*LoginResponse, error)
 	UserInfo(string) (*UserInfoResponse, error)

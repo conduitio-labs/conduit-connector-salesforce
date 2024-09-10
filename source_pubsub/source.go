@@ -25,7 +25,6 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-//go:generate mockery --with-expecter --name=client --inpackage --log-level error
 type client interface {
 	Next(context.Context) (opencdc.Record, error)
 	Initialize(context.Context) error

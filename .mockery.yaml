@@ -1,0 +1,24 @@
+---
+with-expecter: true
+inpackage: true
+disable-version-string: true
+filename: "mock_{{.InterfaceName | snakecase}}_test.go"
+mockname: "mock{{.InterfaceName | firstUpper}}"
+dir: "{{.InterfaceDir}}"
+packages:
+  github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1:
+    interfaces:
+      PubSubClient:
+        config:
+          dir: source_pubsub
+          inpackage: false
+          outpkg: source
+      PubSub_SubscribeClient:
+        config:
+          dir: source_pubsub
+          inpackage: false
+          outpkg: source
+  github.com/conduitio-labs/conduit-connector-salesforce/source:
+    interfaces:
+      authenticator: null
+      client: null
