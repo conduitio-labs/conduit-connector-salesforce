@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2022 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd"
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth"
 	sfSource "github.com/conduitio-labs/conduit-connector-salesforce/source"
-	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
@@ -31,7 +30,7 @@ type CustomConfigurableAcceptanceTestDriver struct {
 	streamingClient *streamingClientMock
 }
 
-func (d *CustomConfigurableAcceptanceTestDriver) WriteToSource(_ *testing.T, records []opencdc.Record) (results []opencdc.Record) {
+func (d *CustomConfigurableAcceptanceTestDriver) WriteToSource(_ *testing.T, records []sdk.Record) (results []sdk.Record) {
 	d.streamingClient.SetResults(records)
 
 	// No destination connector, return wanted records

@@ -11,7 +11,7 @@ Run `make`.
 
 ## Source
 
-The Source connector subscribes to given list of topics and listens for events published by Salesforce.
+The Source connector subscribes to Salesforce platform events and queries published events in real time.
 
 ### How it works
 
@@ -37,7 +37,7 @@ For more information about how to create Push Topics go to step-by-step configur
 
 ##### The generated payload
 
-Connector produces [`opencdc.StructuredData`](https://github.com/ConduitIO/conduit-commons/blob/main/opencdc/record.go) data type with information from the received event. The payload entirely depends on the Push Topic's query.
+Connector produces [`sdk.StructuredData`](https://github.com/ConduitIO/conduit-connector-sdk/blob/main/record.go) data type with information from the received event. The payload entirely depends on the Push Topic's query.
 The following data is included:
 - `Key` - either `nil` when not configured or the value of payload's `keyField` field.
 - `Payload` - Salesforce Push Topic query result; a decoded JSON value.
@@ -60,6 +60,8 @@ There may be need to reconnect while connector is working. Server returns condit
 
 ### Configuration Options
 
+## Destination 
+
 | name              | description                                                                                                                                                                                                                                    | required | default |
 |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
 | `environment`     | Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.                                                                                  | `true`   |         |
@@ -71,9 +73,23 @@ There may be need to reconnect while connector is working. Server returns condit
 | `pushTopicsNames` | The comma-separated list of names of the Push Topics to listen to. All values will be prefixed with `/topic/`. All values will have white spaces trimmed. Any empty value is skipped. All Topics have to exist for connector to start working. | `true`   |         |
 | `keyField`        | The name of the Response's field that should be used as a Payload's Key. Empty value will set it to `nil`.                                                                                                                                     | `false`  | `"Id"`  |
 
+## Source
+
+
+| name              | description                                                                                                                                                                                                                                    | required | default |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
+| `oauthEndpoint`     | Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com ) |   | `true`  |
+| `clientId`        | OAuth Client ID (Consumer Key)           | `true`   |         |
+| `clientSecret`    | OAuth Client Secret (Consumer Secret)      | `true`   |         |
+| `username`        | Username.  | `true`   |         |
+| `topicName` | Event topic name for your event (e.g: /event/Accepted_Quote__e)   | `true`   |         |
+
+
 ### Step-by-step configuration example
 
-There are a couple of steps that need to be done to start working with Salesforce connector.
+## Destination
+
+There are a couple of steps that need to be done to start working with Salesforce connector as destination.
 
 1. Log in into Your Salesforce account, e.g. https://my-demo-app.my.salesforce.com. The environment is `my-demo-app`.
 2. First, if not already done, You need to create connected app and enable OAuth: [Enable OAuth Settings for API Integration](https://help.salesforce.com/s/articleView?id=sf.connected_app_create_api_integration.htm&type=5).
@@ -104,6 +120,25 @@ There are a couple of steps that need to be done to start working with Salesforc
         Then for event with value `Id=123, Name=Create summary` Record's Key will be set to `123`.
 
         Later, this may be utilized by other connectors, e.g. [Elasticsearch connector](https://github.com/conduitio-labs/conduit-connector-elasticsearch) will create Document with ID of Record's Key when available.
+
+## Source 
+
+1. Log in into Your Salesforce account, e.g. https://my-demo-app.my.salesforce.com. The environment is `my-demo-app`.
+2. First, if not already done, You need to create connected app and enable OAuth: [Enable OAuth Settings for API Integration](https://help.salesforce.com/s/articleView?id=sf.connected_app_create_api_integration.htm&type=5).
+
+    The callback URL is required, but not relevant for this connector, so you can put anything there.
+
+    Successfully configured app example can be seen below:
+
+    ![Connected App example](docs/connect_and_configure_app.png)
+3. Copy **Consumer Key** and **Consumer Secret**. If You need these values once again You can always find them in _Setup -> Apps -> App Manager_, find app on the list and choose _View_ option.
+    ![View OAuth tokens](docs/view_oauth_tokens.png)
+
+4. You will need to set following settings on the application, refer to ![OAuth Client Credentials Flow Requirements](https://help.salesforce.com/s/articleView?id=sf.connected_app_client_credentials_setup.htm&type=5) . 
+    Make sure the user you are attaching to the application has "API ENABLED" permission set on their account. 
+
+5. Set up event: 
+
 
 ## Testing
 

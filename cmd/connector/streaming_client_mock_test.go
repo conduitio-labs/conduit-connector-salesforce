@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2022 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,16 +19,16 @@ import (
 	"sync"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 type streamingClientMock struct {
-	results   []opencdc.Record
+	results   []sdk.Record
 	lastIndex int
 	mutex     sync.Mutex
 }
 
-func (s *streamingClientMock) SetResults(results []opencdc.Record) {
+func (s *streamingClientMock) SetResults(results []sdk.Record) {
 	s.mutex.Lock()
 	s.results = results
 	s.mutex.Unlock()
@@ -55,7 +55,7 @@ func (s *streamingClientMock) Connect(_ context.Context) (responses.ConnectRespo
 				Event: responses.ConnectResponseEventDataMetadata{
 					ReplayID: s.lastIndex,
 				},
-				SObject: record.Payload.After.(opencdc.StructuredData),
+				SObject: record.Payload.After.(sdk.StructuredData),
 			},
 			Channel: "MyTopic1",
 		})
