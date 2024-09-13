@@ -4,9 +4,11 @@ go 1.22.5
 
 toolchain go1.22.6
 
+replace github.com/conduitio/conduit-connector-sdk => ../conduit-connector-sdk
+
 require (
 	github.com/conduitio/conduit-commons v0.3.0
-	github.com/conduitio/conduit-connector-sdk v0.10.0
+	github.com/conduitio/conduit-connector-sdk v0.10.1-0.20240913224557-0e69f6f1fe63
 	github.com/golangci/golangci-lint v1.61.0
 	github.com/jaswdr/faker v1.19.1
 	github.com/linkedin/goavro/v2 v2.13.0
@@ -61,7 +63,7 @@ require (
 	github.com/bkielbasa/cyclop v1.2.1 // indirect
 	github.com/blizzy78/varnamelen v0.8.0 // indirect
 	github.com/bombsimon/wsl/v4 v4.4.1 // indirect
-	github.com/breml/bidichk v0.2.7 // indirect
+	github.com/breml/bidichk v0.3.1 // indirect
 	github.com/breml/errchkjson v0.3.6 // indirect
 	github.com/butuzov/ireturn v0.3.0 // indirect
 	github.com/butuzov/mirror v1.2.0 // indirect
@@ -70,7 +72,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charithe/durationcheck v0.0.10 // indirect
 	github.com/chavacava/garif v0.1.0 // indirect
-	github.com/ckaznocha/intrange v0.2.0 // indirect
+	github.com/ckaznocha/intrange v0.2.1 // indirect
 	github.com/conduitio/conduit-connector-protocol v0.7.0 // indirect
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
 	github.com/daixiang0/gci v0.13.5
@@ -82,7 +84,7 @@ require (
 	github.com/firefart/nonamedreturns v1.0.5 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fzipp/gocyclo v0.6.0 // indirect
-	github.com/ghostiam/protogetter v0.3.6 // indirect
+	github.com/ghostiam/protogetter v0.3.8 // indirect
 	github.com/go-critic/go-critic v0.11.4 // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
 	github.com/go-toolsmith/astcopy v1.1.0 // indirect
@@ -184,7 +186,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
 	github.com/sivchari/tenv v1.10.0 // indirect
-	github.com/sonatard/noctx v0.0.2 // indirect
+	github.com/sonatard/noctx v0.0.3 // indirect
 	github.com/sourcegraph/go-diff v0.7.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
