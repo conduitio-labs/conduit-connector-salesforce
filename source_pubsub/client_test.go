@@ -22,12 +22,11 @@ import (
 	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/tomb.v2"
 )
 
 func TestPubSubClient_Initialize(t *testing.T) {
 	mockAuth := newMockAuthenticator(t)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.Background()
 
 	mockAuth.EXPECT().
 		Login().
@@ -51,22 +50,18 @@ func TestPubSubClient_Initialize(t *testing.T) {
 		nil,
 	)
 
-	tt, _ := tomb.WithContext(ctx)
-
 	c := &PubSubClient{
-		oauth:        mockAuth,
-		pubSubClient: mockPubSubClient,
-		tomb:         tt,
-		buffer:       make(chan ConnectResponseEvent),
-		topicNames:   []string{"my-topic"},
-		ticker:       time.NewTicker(time.Second * 1),
+		oauth:         mockAuth,
+		pubSubClient:  mockPubSubClient,
+		buffer:        make(chan ConnectResponseEvent),
+		topicNames:    []string{"my-topic"},
+		fetchInterval: time.Second * 1,
 	}
 
 	require.NoError(t, c.Initialize(ctx))
 	require.True(t, c.tomb.Alive())
 
 	c.Stop(ctx)
-	cancel()
 	err := c.Wait(context.Background())
 	require.Error(t, err)
 	require.ErrorIs(t, err, context.Canceled)
