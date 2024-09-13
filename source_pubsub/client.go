@@ -383,6 +383,10 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 				return fmt.Errorf("error recv events: %w", err)
 			}
 
+			if len(events) == 0 {
+				continue
+			}
+
 			sdk.Logger(ctx).Debug().
 				Int("events", len(events)).
 				Dur("elapsed", time.Since(lastRecvdAt)).
@@ -590,6 +594,11 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 			return nil, nil
 		}
 		return nil, err
+	}
+
+	// Empty response
+	if len(resp.Events) == 0 {
+		return []ConnectResponseEvent{}, nil
 	}
 
 	logger.Info().
