@@ -50,23 +50,23 @@ func (s *Source) Parameters() config.Parameters {
 }
 
 func (s *Source) Configure(ctx context.Context, cfg config.Config) error {
-	var config Config
+	var c Config
 
 	if err := sdk.Util.ParseConfig(
 		ctx,
 		cfg,
-		&s.config,
+		&c,
 		NewSource().Parameters(),
 	); err != nil {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	config, err := config.Validate(ctx)
+	c, err := c.Validate(ctx)
 	if err != nil {
 		return fmt.Errorf("config failed to validate: %w", err)
 	}
 
-	s.config = config
+	s.config = c
 
 	return nil
 }

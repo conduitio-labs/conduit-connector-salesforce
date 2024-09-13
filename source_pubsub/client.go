@@ -64,12 +64,13 @@ type PubSubClient struct {
 	unionFields map[string]map[string]struct{}
 
 	buffer chan ConnectResponseEvent
-	ticker *time.Ticker
 
-	tomb       *tomb.Tomb
-	topicNames []string
-	currentPos position.Topics
-	maxRetries uint
+	stop          func()
+	tomb          *tomb.Tomb
+	topicNames    []string
+	currentPos    position.Topics
+	maxRetries    uint
+	fetchInterval time.Duration
 }
 
 type Topic struct {
@@ -116,8 +117,6 @@ func NewGRPCClient(ctx context.Context, config Config, currentPos position.Topic
 		return nil, err
 	}
 
-	t, _ := tomb.WithContext(ctx)
-
 	if config.ReplayPreset == "latest" {
 		replayPreset = eventbusv1.ReplayPreset_LATEST
 	} else {
@@ -127,18 +126,17 @@ func NewGRPCClient(ctx context.Context, config Config, currentPos position.Topic
 	currentPos.SetTopics(config.TopicNames)
 
 	return &PubSubClient{
-		conn:         conn,
-		pubSubClient: eventbusv1.NewPubSubClient(conn),
-		codecCache:   make(map[string]*goavro.Codec),
-		unionFields:  make(map[string]map[string]struct{}),
-		replayPreset: replayPreset,
-		buffer:       make(chan ConnectResponseEvent),
-		ticker:       time.NewTicker(config.PollingPeriod),
-		topicNames:   config.TopicNames,
-		currentPos:   currentPos,
-		oauth:        &oauth{Credentials: creds},
-		tomb:         t,
-		maxRetries:   config.RetryCount,
+		conn:          conn,
+		pubSubClient:  eventbusv1.NewPubSubClient(conn),
+		codecCache:    make(map[string]*goavro.Codec),
+		unionFields:   make(map[string]map[string]struct{}),
+		replayPreset:  replayPreset,
+		buffer:        make(chan ConnectResponseEvent),
+		fetchInterval: config.PollingPeriod,
+		topicNames:    config.TopicNames,
+		currentPos:    currentPos,
+		oauth:         &oauth{Credentials: creds},
+		maxRetries:    config.RetryCount,
 	}, nil
 }
 
@@ -154,10 +152,14 @@ func (c *PubSubClient) Initialize(ctx context.Context) error {
 		return err
 	}
 
+	stopCtx, cancel := context.WithCancel(ctx)
+	c.stop = cancel
+
+	c.tomb, _ = tomb.WithContext(stopCtx)
+
 	for _, topic := range c.topicNames {
 		c.tomb.Go(func() error {
-			ctx := c.tomb.Context(nil) //nolint:staticcheck // SA1012 tomb expects nil
-
+			ctx := c.tomb.Context(nil) //nolint:staticcheck //bomb expects nil when parent context is set.
 			return c.startCDC(ctx, Topic{
 				topicName:  topic,
 				retryCount: c.maxRetries,
@@ -206,8 +208,10 @@ func (c *PubSubClient) login(ctx context.Context) error {
 }
 
 // Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic.
-func (c *PubSubClient) canSubscribe(_ context.Context) error {
+func (c *PubSubClient) canSubscribe(ctx context.Context) error {
 	var trailer metadata.MD
+
+	logger := sdk.Logger(ctx).With().Str("at", "client.canSubscribe").Logger()
 
 	for _, topic := range c.topicNames {
 		req := &eventbusv1.TopicRequest{
@@ -218,6 +222,7 @@ func (c *PubSubClient) canSubscribe(_ context.Context) error {
 		defer cancel()
 
 		resp, err := c.pubSubClient.GetTopic(ctx, req, grpc.Trailer(&trailer))
+		logger.Debug().Bool("trailers", true).Fields(trailer).Msg("retrieved topic")
 		if err != nil {
 			return fmt.Errorf("failed to retrieve topic %q: %w", topic, err)
 		}
@@ -226,7 +231,7 @@ func (c *PubSubClient) canSubscribe(_ context.Context) error {
 			return fmt.Errorf("user %q not allowed to subscribe to %q", c.userID, resp.TopicName)
 		}
 
-		sdk.Logger(ctx).Debug().
+		logger.Debug().
 			Bool("can_subscribe", resp.CanSubscribe).
 			Str("topic", resp.TopicName).
 			Msgf("client allowed to subscribe to events on %q", topic)
@@ -253,7 +258,9 @@ func (c *PubSubClient) Next(ctx context.Context) (opencdc.Record, error) {
 
 // Stop ends CDC processing.
 func (c *PubSubClient) Stop(ctx context.Context) {
-	c.ticker.Stop()
+	if c.stop != nil {
+		c.stop()
+	}
 
 	sdk.Logger(ctx).Debug().
 		Msgf("stopping pubsub client on topics %q", strings.Join(c.topicNames, ","))
@@ -312,7 +319,10 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 		retry       bool
 		err         error
 		lastRecvdAt = time.Now().UTC()
+		ticker      = time.NewTicker(c.fetchInterval)
 	)
+
+	defer ticker.Stop()
 
 	for {
 		sdk.Logger(ctx).Debug().
@@ -341,7 +351,7 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-c.ticker.C: // detect changes every polling period.
+		case <-ticker.C: // detect changes every polling period.
 
 			sdk.Logger(ctx).Debug().
 				Dur("elapsed", time.Since(lastRecvdAt)).
@@ -455,6 +465,12 @@ func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error
 	defer cancel()
 
 	resp, err := c.pubSubClient.GetSchema(ctx, req, grpc.Trailer(&trailer))
+	sdk.Logger(ctx).
+		Debug().
+		Str("at", "client.getschema").
+		Bool("trailers", true).
+		Fields(trailer).
+		Msg("retrieved schema")
 	if err != nil {
 		return nil, fmt.Errorf("error getting schema from salesforce api - %s", err)
 	}
@@ -524,11 +540,13 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 		start  = time.Now().UTC()
 	)
 
+	logger := sdk.Logger(ctx).With().Str("at", "client.recv").Logger()
+
 	if len(replayID) > 0 {
 		preset = eventbusv1.ReplayPreset_CUSTOM
 	}
 
-	sdk.Logger(ctx).Info().
+	logger.Info().
 		Str("preset", preset.String()).
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
 		Str("topic", topic).
@@ -541,8 +559,13 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 			err,
 		)
 	}
+	defer func() {
+		if err := subClient.CloseSend(); err != nil {
+			logger.Error().Err(err).Msg("failed to close sub client")
+		}
+	}()
 
-	sdk.Logger(ctx).Info().
+	logger.Info().
 		Str("preset", preset.String()).
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
 		Str("topic", topic).
@@ -551,11 +574,13 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 
 	resp, err := subClient.Recv()
 	if err != nil {
+		logger.Error().Fields(subClient.Trailer()).Msg("recv error")
+
 		if errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("pubsub: stream closed when receiving events: %w", err)
 		}
 		if c.connErr(err) {
-			sdk.Logger(ctx).Warn().
+			logger.Warn().
 				Str("preset", preset.String()).
 				Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
 				Str("topic", topic).
@@ -567,17 +592,23 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 		return nil, err
 	}
 
-	sdk.Logger(ctx).Info().
+	logger.Info().
 		Str("preset", preset.String()).
 		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
 		Str("topic", topic).
 		Int("events", len(resp.Events)).
+		Int32("pending_events", resp.PendingNumRequested).
 		Dur("elapsed", time.Since(start)).
 		Msg("subscriber received events")
 
 	var events []ConnectResponseEvent
 
 	for _, e := range resp.Events {
+		logger.Debug().
+			Str("schema_id", e.Event.SchemaId).
+			Str("event_id", e.Event.Id).
+			Msg("decoding event")
+
 		codec, err := c.fetchCodec(ctx, e.Event.SchemaId)
 		if err != nil {
 			return events, err
@@ -592,6 +623,8 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 		if !ok {
 			return events, fmt.Errorf("invalid payload type %T", payload)
 		}
+
+		logger.Trace().Fields(payload).Msg("decoded event")
 
 		events = append(events, ConnectResponseEvent{
 			ReplayID:   e.ReplayId,
@@ -608,20 +641,26 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 // Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache,
 // then a GetSchema call is made and the corresponding codec is cached for future use.
 func (c *PubSubClient) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
+	logger := sdk.Logger(ctx).
+		With().
+		Str("at", "client.fetchcodec").
+		Str("schema_id", schemaID).
+		Logger()
+
 	codec, ok := c.codecCache[schemaID]
 	if ok {
-		sdk.Logger(ctx).Trace().Msg("Fetched cached codec...")
 		return codec, nil
 	}
 
-	sdk.Logger(ctx).Trace().Msg("Making GetSchema request for uncached schema...")
 	schema, err := c.GetSchema(schemaID)
 	if err != nil {
 		return nil, fmt.Errorf("error making getschema request for uncached schema - %s", err)
 	}
 
-	sdk.Logger(ctx).Trace().Msg("Creating codec from uncached schema...")
 	schemaJSON := schema.GetSchemaJson()
+
+	logger.Trace().Str("schema_json", schemaJSON).Msg("fetched schema")
+
 	codec, err = goavro.NewCodec(schemaJSON)
 	if err != nil {
 		return nil, fmt.Errorf("error creating codec from uncached schema - %s", err)

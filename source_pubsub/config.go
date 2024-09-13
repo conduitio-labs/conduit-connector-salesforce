@@ -41,7 +41,7 @@ type Config struct {
 	TopicName string `json:"topicName"`
 
 	// TopicNames are the TopicNames the source connector will subscribe to
-	TopicNames []string `json:"topicNames" validate:"required"`
+	TopicNames []string `json:"topicNames"`
 
 	// Deprecated: Username is the client secret from the salesforce app.
 	Username string `json:"username"`
@@ -92,7 +92,7 @@ func (c Config) Validate(ctx context.Context) (Config, error) {
 	}
 
 	if len(c.TopicNames) == 0 {
-		errs = append(errs, fmt.Errorf("invalid TopicName name %q", c.TopicNames))
+		errs = append(errs, fmt.Errorf("'topicNames' empty, need at least one topic"))
 	}
 
 	if c.PollingPeriod == 0 {
