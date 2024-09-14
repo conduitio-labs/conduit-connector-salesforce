@@ -4,8 +4,6 @@ go 1.22.5
 
 toolchain go1.22.6
 
-replace github.com/conduitio/conduit-connector-sdk => ../conduit-connector-sdk
-
 require (
 	github.com/conduitio/conduit-commons v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.10.1-0.20240913224557-0e69f6f1fe63
