@@ -6,7 +6,7 @@ toolchain go1.22.6
 
 require (
 	github.com/conduitio/conduit-commons v0.3.0
-	github.com/conduitio/conduit-connector-sdk v0.10.0
+	github.com/conduitio/conduit-connector-sdk v0.10.1
 	github.com/golangci/golangci-lint v1.61.0
 	github.com/jaswdr/faker v1.19.1
 	github.com/linkedin/goavro/v2 v2.13.0
