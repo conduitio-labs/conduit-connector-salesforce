@@ -27,8 +27,8 @@ import (
 	"time"
 
 	rt "github.com/avast/retry-go/v4"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/position"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/proto"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/linkedin/goavro/v2"
 	"google.golang.org/grpc"

@@ -17,14 +17,14 @@ package main
 import (
 	sf "github.com/conduitio-labs/conduit-connector-salesforce"
 	sfDestination "github.com/conduitio-labs/conduit-connector-salesforce/destination"
-	sfSourcePubsub "github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub"
+	sfSource "github.com/conduitio-labs/conduit-connector-salesforce/source"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 func main() {
 	sdk.Serve(sdk.Connector{
 		NewSpecification: sf.Specification,
-		NewSource:        sfSourcePubsub.NewSource,
+		NewSource:        sfSource.NewSource,
 		NewDestination:   sfDestination.NewDestination,
 	})
 }

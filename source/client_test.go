@@ -22,8 +22,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/mock"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/mocks"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/proto"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/mocks"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/proto"
 )
 
 func TestPubSubClient_Initialize(t *testing.T) {
