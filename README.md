@@ -19,7 +19,7 @@ This section describes the technical details of how the connector works.
 
 #### PubSub API
 
-Conduit Source Connector uses [PubSub Api](https://developer.salesforce.com/docs/platform/pub-sub-api/overview) for subscribing to event data.
+Conduit Source Connector uses [PubSub API](https://developer.salesforce.com/docs/platform/pub-sub-api/overview) for subscribing to event data.
 
 ##### Platform Events
 
