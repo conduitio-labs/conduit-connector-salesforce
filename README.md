@@ -59,15 +59,18 @@ The connector authenticates with Salesforce using OAuth credentials. Once succes
 2. First, if not already done, You need to create connected app and enable following settings: 
     
     Under **API (Enable OAuth Settings)** 
-        a. Enable `Enable OAuth Settings`
-        b. For `Selected OAuth Scope` add following permissions : `Access the Salesforce API Platform` and `Perform requests at any time`. 
-        c. Enable `Require Proof Key for Code Exchange (PKCE) Extension for Supported Authorization Flows` 
-        d. Enable `Require Secret for Web Server Flow` 
-        e. Enable `Require Secret for Refresh Token Flow` 
-        c. Enable `Enable Client Credentials Flow` 
+    - Enable `Enable OAuth Settings`
+    - Add the following permissions for Selected OAuth Scope:
+        - `Access the Salesforce API Platform`
+        - `Perform requests at any time`  
+    - Enable `Require Proof Key for Code Exchange (PKCE) Extension for Supported Authorization Flows`
+    - Enable `Require Secret for Web Server Flow`
+    - Enable `Require Secret for Refresh Token Flow`
+    - Enable `Enable Client Credentials Flow`
+
 
     Under **Custom Connected App Handler** 
-        a. On `Run As` select a user with 'API Enabled' permission privileges. (If user doesn't have them, you can add them under Permission Sets on User settings)
+    - On `Run As` select a user with 'API Enabled' permission privileges. (If user doesn't have them, you can add them under Permission Sets on User settings)
 
     ![Connected App example](docs/connected_app.png)
 
@@ -77,7 +80,7 @@ The connector authenticates with Salesforce using OAuth credentials. Once succes
 
 4. Once the app is created, go to _Connected Apps -> Manage Connected Apps_ and edit the application. 
     Under **Client Credentials Flow** 
-        a. On `Run As` select a user with 'API Enabled' permission privileges. (If user doesn't have them, you can add them under Permission Sets on User settings)
+    - On `Run As` select a user with 'API Enabled' permission privileges. (If user doesn't have them, you can add them under Permission Sets on User settings)
 
 ### Error handling
 
