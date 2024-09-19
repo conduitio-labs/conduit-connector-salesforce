@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,83 +15,105 @@
 package source
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"strings"
+	"net"
+	"net/url"
+	"slices"
+	"time"
+
+	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-const (
-	ConfigKeyEnvironment     = "environment"
-	ConfigKeyClientID        = "clientId"
-	ConfigKeyClientSecret    = "clientSecret"
-	ConfigKeyUsername        = "username"
-	ConfigKeyPassword        = "password"
-	ConfigKeySecurityToken   = "securityToken"
-	ConfigKeyPushTopicsNames = "pushTopicsNames"
-	ConfigKeyKeyField        = "keyField"
-)
-
+//go:generate paramgen -output=paramgen_config.go Config
 type Config struct {
-	Environment     string
-	ClientID        string
-	ClientSecret    string
-	Username        string
-	Password        string
-	SecurityToken   string
-	PushTopicsNames []string
-	KeyField        string
+	// ClientID is the client id from the salesforce app
+	ClientID string `json:"clientID" validate:"required"`
+
+	// ClientSecret is the client secret from the salesforce app
+	ClientSecret string `json:"clientSecret" validate:"required"`
+
+	// OAuthEndpoint is the OAuthEndpoint from the salesforce app
+	OAuthEndpoint string `json:"oauthEndpoint" validate:"required"`
+
+	// TopicName {WARN will be deprecated soon} the TopicName the source connector will subscribe to
+	TopicName string `json:"topicName"`
+
+	// TopicNames are the TopicNames the source connector will subscribe to
+	TopicNames []string `json:"topicNames"`
+
+	// Deprecated: Username is the client secret from the salesforce app.
+	Username string `json:"username"`
+
+	// PollingPeriod is the client event polling interval
+	PollingPeriod time.Duration `json:"pollingPeriod" default:"100ms"`
+
+	// gRPC Pubsub Salesforce API address
+	PubsubAddress string `json:"pubsubAddress" default:"api.pubsub.salesforce.com:7443"`
+
+	// InsecureSkipVerify disables certificate validation
+	InsecureSkipVerify bool `json:"insecureSkipVerify" default:"false"`
+
+	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
+	ReplayPreset string `json:"replayPreset" default:"earliest"`
+
+	// Number of retries allowed per read before the connector errors out
+	RetryCount uint `json:"retryCount" default:"10"`
 }
 
-func ParseConfig(cfgRaw map[string]string) (Config, error) {
-	cfg := Config{
-		Environment:     cfgRaw[ConfigKeyEnvironment],
-		ClientID:        cfgRaw[ConfigKeyClientID],
-		ClientSecret:    cfgRaw[ConfigKeyClientSecret],
-		Username:        cfgRaw[ConfigKeyUsername],
-		Password:        cfgRaw[ConfigKeyPassword],
-		SecurityToken:   cfgRaw[ConfigKeySecurityToken],
-		PushTopicsNames: make([]string, 0),
-		KeyField:        cfgRaw[ConfigKeyKeyField],
-	}
-	if cfg.Environment == "" {
-		return Config{}, requiredConfigErr(ConfigKeyEnvironment)
-	}
-	if cfg.ClientID == "" {
-		return Config{}, requiredConfigErr(ConfigKeyClientID)
-	}
-	if cfg.ClientSecret == "" {
-		return Config{}, requiredConfigErr(ConfigKeyClientSecret)
-	}
-	if cfg.Username == "" {
-		return Config{}, requiredConfigErr(ConfigKeyUsername)
-	}
-	if cfg.Password == "" {
-		return Config{}, requiredConfigErr(ConfigKeyPassword)
+func (c Config) Validate(ctx context.Context) (Config, error) {
+	var errs []error
+
+	// Warn about deprecated fields
+	if c.Username != "" {
+		sdk.Logger(ctx).Warn().
+			Msg(`"username" is deprecated, use "clientID" and "clientSecret"`)
 	}
 
-	// Push Topics' Names
-	registeredTopics := make(map[string]bool)
+	if c.TopicName != "" {
+		sdk.Logger(ctx).Warn().
+			Msg(`"topicName" is deprecated, use "topicNames" instead.`)
 
-	for _, topicName := range strings.Split(cfgRaw[ConfigKeyPushTopicsNames], ",") {
-		topicNameClear := strings.TrimSpace(topicName)
-		if topicNameClear == "" {
-			continue
-		}
-
-		if _, exists := registeredTopics[topicNameClear]; exists {
-			continue
-		}
-
-		cfg.PushTopicsNames = append(cfg.PushTopicsNames, topicNameClear)
-		registeredTopics[topicNameClear] = true
+		c.TopicNames = slices.Compact(append(c.TopicNames, c.TopicName))
 	}
 
-	if len(cfg.PushTopicsNames) == 0 {
-		return Config{}, requiredConfigErr(ConfigKeyPushTopicsNames)
+	// Validate provided fields
+	if c.ClientID == "" {
+		errs = append(errs, fmt.Errorf("invalid client id %q", c.ClientID))
 	}
 
-	return cfg, nil
-}
+	if c.ClientSecret == "" {
+		errs = append(errs, fmt.Errorf("invalid client secret %q", c.ClientSecret))
+	}
 
-func requiredConfigErr(name string) error {
-	return fmt.Errorf("%q config value must be set", name)
+	if c.OAuthEndpoint == "" {
+		errs = append(errs, fmt.Errorf("invalid oauth endpoint %q", c.OAuthEndpoint))
+	}
+
+	if len(c.TopicNames) == 0 {
+		errs = append(errs, fmt.Errorf("'topicNames' empty, need at least one topic"))
+	}
+
+	if c.PollingPeriod == 0 {
+		errs = append(errs, fmt.Errorf("polling period cannot be zero %d", c.PollingPeriod))
+	}
+
+	if c.PubsubAddress == "" {
+		errs = append(errs, fmt.Errorf("invalid pubsub address %q", c.OAuthEndpoint))
+	}
+
+	if len(errs) != 0 {
+		return c, errors.Join(errs...)
+	}
+
+	if _, err := url.Parse(c.OAuthEndpoint); err != nil {
+		return c, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
+	}
+
+	if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {
+		return c, fmt.Errorf("failed to parse pubsub address: %w", err)
+	}
+
+	return c, nil
 }

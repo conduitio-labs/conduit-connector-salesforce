@@ -28,7 +28,7 @@ import (
 
 	rt "github.com/avast/retry-go/v4"
 	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source_pubsub/position"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/linkedin/goavro/v2"

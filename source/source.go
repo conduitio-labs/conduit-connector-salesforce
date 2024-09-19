@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2022 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,385 +16,161 @@ package source
 
 import (
 	"context"
-	"errors"
+	"encoding/base64"
 	"fmt"
-	"strconv"
-	"time"
 
-	"github.com/conduitio-labs/conduit-connector-salesforce/internal"
-	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd"
-	"github.com/conduitio-labs/conduit-connector-salesforce/internal/cometd/responses"
-	"github.com/conduitio-labs/conduit-connector-salesforce/internal/salesforce/oauth"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"gopkg.in/tomb.v2"
 )
 
-const sfCometDVersion = "54.0"
+type client interface {
+	Next(context.Context) (opencdc.Record, error)
+	Initialize(context.Context) error
+	Stop(context.Context)
+	Close(context.Context) error
+	Wait(context.Context) error
+}
 
-var (
-	OAuthClientFactory     = oauth.NewDefaultClient
-	StreamingClientFactory = cometd.NewDefaultClient
-)
-
-var ErrConnectorIsStopped = errors.New("connector is stopped")
+var _ client = (*PubSubClient)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
-
-	config          Config
-	streamingClient cometd.Client
-	subscriptions   map[string]bool
-	events          chan responses.ConnectResponseEvent
-	tomb            *tomb.Tomb
+	client client
+	config Config
 }
 
 func NewSource() sdk.Source {
-	return &Source{
-		subscriptions: make(map[string]bool),
-		events:        make(chan responses.ConnectResponseEvent),
-		tomb:          nil,
-	}
+	return sdk.SourceWithMiddleware(&Source{}, sdk.DefaultSourceMiddleware()...)
 }
 
 func (s *Source) Parameters() config.Parameters {
-	return map[string]config.Parameter{
-		ConfigKeyEnvironment: {
-			Description: "Authorization service based on Organization’s Domain Name (e.g.: https://MyDomainName.my.salesforce.com -> `MyDomainName`) or `sandbox` for test environment.",
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-			},
-		},
-		ConfigKeyClientID: {
-			Description: "OAuth Client ID (Consumer Key).",
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-			},
-		},
-		ConfigKeyClientSecret: {
-			Description: "OAuth Client Secret (Consumer Secret).",
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-			},
-		},
-		ConfigKeyUsername: {
-			Description: "Username.",
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-			},
-		},
-		ConfigKeyPassword: {
-			Description: "Password.",
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-			},
-		},
-		ConfigKeySecurityToken: {
-			Description: "Security token as described here: https://help.salesforce.com/s/articleView?id=sf.user_security_token.htm&type=5.",
-		},
-		ConfigKeyPushTopicsNames: {
-			Description: "The name or name pattern of the Push Topic to listen to. This value will be prefixed with `/topic/`.",
-			Validations: []config.Validation{
-				config.ValidationRequired{},
-			},
-		},
-		ConfigKeyKeyField: {
-			Default:     "Id",
-			Description: "The name of the field that should be used as a Payload's Key. Empty value will set it to `nil`.",
-		},
-	}
+	return s.config.Parameters()
 }
 
-func (s *Source) Configure(_ context.Context, cfgRaw config.Config) (err error) {
-	s.config, err = ParseConfig(cfgRaw)
+func (s *Source) Configure(ctx context.Context, cfg config.Config) error {
+	var c Config
+
+	if err := sdk.Util.ParseConfig(
+		ctx,
+		cfg,
+		&c,
+		NewSource().Parameters(),
+	); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	c, err := c.Validate(ctx)
 	if err != nil {
-		return fmt.Errorf("configuration error: %w", err)
+		return fmt.Errorf("config failed to validate: %w", err)
+	}
+
+	s.config = c
+
+	return nil
+}
+
+func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
+	logger := sdk.Logger(ctx)
+
+	var parsedPositions position.Topics
+
+	logger.Debug().
+		Str("at", "source.open").
+		Str("position", base64.StdEncoding.EncodeToString(sdkPos)).
+		Strs("topics", s.config.TopicNames).
+		Msg("Open Source Connector")
+
+	parsedPositions, err := position.ParseSDKPosition(sdkPos, s.config.TopicName)
+	if err != nil {
+		return fmt.Errorf("error parsing sdk position: %w", err)
+	}
+
+	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
+	if err != nil {
+		return fmt.Errorf("could not create GRPCClient: %w", err)
+	}
+
+	if err := client.Initialize(ctx); err != nil {
+		return fmt.Errorf("could not initialize pubsub client: %w", err)
+	}
+
+	s.client = client
+
+	for _, t := range s.config.TopicNames {
+		p := parsedPositions.TopicReplayID(t)
+		logger.Debug().
+			Str("at", "source.open").
+			Str("position", string(p)).
+			Str("position encoded", base64.StdEncoding.EncodeToString(p)).
+			Str("topic", t).
+			Msgf("Grpc Client has been set. Will begin read for topic: %s", t)
 	}
 
 	return nil
 }
 
-func (s *Source) Open(ctx context.Context, _ opencdc.Position) error {
-	// Authenticate
-	oAuthClient := OAuthClientFactory(
-		s.config.Environment,
-		s.config.ClientID,
-		s.config.ClientSecret,
-		s.config.Username,
-		s.config.Password,
-		s.config.SecurityToken,
-	)
+func (s *Source) Read(ctx context.Context) (rec opencdc.Record, err error) {
+	logger := sdk.Logger(ctx)
+	logger.Debug().
+		Strs("topics", s.config.TopicNames).
+		Msg("begin read")
 
-	token, err := oAuthClient.Authenticate(ctx)
+	r, err := s.client.Next(ctx)
 	if err != nil {
-		return fmt.Errorf("connector open error: could not authenticate: %w", err)
+		return opencdc.Record{}, fmt.Errorf("failed to get next record: %w", err)
 	}
 
-	// Streaming API client
-	s.streamingClient, err = StreamingClientFactory(
-		fmt.Sprintf("%s/cometd/%s", token.InstanceURL, sfCometDVersion),
-		token.AccessToken,
-	)
+	// filter out empty record payloads
+	if r.Payload.Before == nil && r.Payload.After == nil {
+		logger.Error().
+			Interface("record", r).
+			Msg("backing off, empty record payload detected")
+
+		return opencdc.Record{}, sdk.ErrBackoffRetry
+	}
+
+	topic, err := r.Metadata.GetCollection()
 	if err != nil {
-		return fmt.Errorf("connector open error: could not create Streaming API client: %w", err)
-	}
-
-	// Handshake
-	if _, err := s.streamingClient.Handshake(ctx); err != nil {
-		return fmt.Errorf("connector open error: handshake error: %w", err)
-	}
-
-	// Subscribe to topic
-	for _, pushTopicName := range s.config.PushTopicsNames {
-		subscribeResponse, err := s.streamingClient.SubscribeToPushTopic(ctx, pushTopicName)
-		if err != nil {
-			return fmt.Errorf("connector open error: subscribe error: failed to subscribe %q topic: %w", pushTopicName, err)
-		}
-		if !subscribeResponse.Successful {
-			return fmt.Errorf("connector open error: subscribe error: failed to subscribe %q topic: %s", pushTopicName, subscribeResponse.Error)
-		}
-
-		// Register subscriptions that we should listen to
-		for _, sub := range subscribeResponse.GetSubscriptions() {
-			s.subscriptions[sub] = true
-		}
-	}
-
-	// Start events worker
-	s.tomb = &tomb.Tomb{}
-	s.tomb.Go(s.eventsWorker)
-
-	return nil
-}
-
-func (s *Source) Read(ctx context.Context) (opencdc.Record, error) {
-	if s.tomb == nil {
-		return opencdc.Record{}, ErrConnectorIsStopped
-	}
-
-	select {
-	case event, ok := <-s.events:
-		if !ok {
-			return opencdc.Record{}, fmt.Errorf("connection closed by the server")
-		}
-
-		keyValue, err := s.getKeyValue(event)
-		if err != nil {
-			return opencdc.Record{}, err
-		}
-
-		replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
-
-		switch event.Data.Event.Type {
-		case responses.CreatedEventType:
-			return sdk.SourceUtil{}.NewRecordCreate(
-				opencdc.Position(replayID),
-				s.getMetadata(event),
-				keyValue,
-				opencdc.StructuredData(event.Data.SObject),
-			), nil
-
-		case responses.UpdatedEventType, responses.UndeletedEventType:
-			return sdk.SourceUtil{}.NewRecordUpdate(
-				opencdc.Position(replayID),
-				s.getMetadata(event),
-				keyValue,
-				nil,
-				opencdc.StructuredData(event.Data.SObject),
-			), nil
-
-		case responses.DeletedEventType:
-			return sdk.SourceUtil{}.NewRecordDelete(
-				opencdc.Position(replayID),
-				s.getMetadata(event),
-				keyValue,
-				nil,
-			), nil
-
-		default:
-			sdk.Logger(ctx).Info().Msgf(
-				"unknown event type: %q, falling back to %q",
-				event.Data.Event.Type,
-				internal.OperationInsert,
-			)
-			return sdk.SourceUtil{}.NewRecordCreate(
-				opencdc.Position(replayID),
-				s.getMetadata(event),
-				keyValue,
-				opencdc.StructuredData(event.Data.SObject),
-			), nil
-		}
-
-	case <-s.tomb.Dead():
-		err := s.tomb.Err()
-		if err == nil {
-			err = ErrConnectorIsStopped
-		}
-
 		return opencdc.Record{}, err
-
-	case <-ctx.Done():
-		return opencdc.Record{}, ctx.Err()
 	}
+
+	logger.Debug().
+		Str("at", "source.read").
+		Str("position encoded", base64.StdEncoding.EncodeToString(r.Position)).
+		Str("position", string(r.Position)).
+		Str("record on topic", topic).
+		Msg("sending record")
+
+	return r, nil
 }
 
-func (s *Source) getMetadata(event responses.ConnectResponseEvent) map[string]string {
-	replayID := strconv.FormatInt(int64(event.Data.Event.ReplayID), 10)
+func (s *Source) Ack(ctx context.Context, pos opencdc.Position) error {
+	sdk.Logger(ctx).Debug().
+		Str("at", "source.ack").
+		Str("uncoded position ", string(pos)).
+		Str("position", base64.StdEncoding.EncodeToString(pos)).
+		Msg("received ack")
 
-	m := opencdc.Metadata{
-		"channel":  event.Channel,
-		"replayId": replayID,
-	}
-	m.SetCreatedAt(event.Data.Event.CreatedDate)
-	return m
-}
-
-func (s *Source) Ack(ctx context.Context, position opencdc.Position) error {
-	sdk.Logger(ctx).Debug().Str("position", string(position)).Msg("got ack")
-
-	return nil // no ack needed
+	return nil
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	var err error
-
-	if s.tomb != nil {
-		s.tomb.Kill(ErrConnectorIsStopped)
-
-		err = s.tomb.Wait()
-
-		// Worker was properly closed
-		if errors.Is(err, ErrConnectorIsStopped) {
-			err = nil
-		}
+	if s.client == nil {
+		return nil
 	}
 
-	if s.streamingClient != nil {
-		// Unsubscribe
-		for _, pushTopicName := range s.config.PushTopicsNames {
-			unsubscribeResponse, err := s.streamingClient.UnsubscribeToPushTopic(ctx, pushTopicName)
-			if err != nil {
-				sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, err)
-			} else if !unsubscribeResponse.Successful {
-				sdk.Logger(ctx).Warn().Msgf("unsubscribe error: failed to unsubscribe %q topic: %s", pushTopicName, unsubscribeResponse.Error)
-			}
-		}
+	s.client.Stop(ctx)
 
-		// Disconnect
-		disconnectResponse, err := s.streamingClient.Disconnect(ctx)
-		if err != nil {
-			return fmt.Errorf("connector close error: disconnect error: %w", err)
-		}
-		if !disconnectResponse.Successful {
-			return fmt.Errorf("connector close error: disconnect error: %s", disconnectResponse.Error)
-		}
-
-		// Close the streaming client
-		s.streamingClient = nil
+	if err := s.client.Wait(ctx); err != nil {
+		sdk.Logger(ctx).Error().Err(err).
+			Msg("received error while stopping client")
 	}
 
-	// Remove registered subscriptions and free the memory
-	s.subscriptions = nil
-
-	return err
-}
-
-// eventsWorker continuously queries for data updates from Salesforce.
-func (s *Source) eventsWorker() error {
-	defer close(s.events)
-
-	for {
-		select {
-		case <-s.tomb.Dying():
-			return s.tomb.Err()
-
-		default:
-			ctx := s.tomb.Context(context.Background())
-
-			// Receive event
-			connectResponse, err := s.streamingClient.Connect(ctx)
-			if err != nil {
-				return fmt.Errorf("failed to receive event: %w", err)
-			}
-
-			// If not successful, check how to retry
-			if !connectResponse.Successful {
-				if nil == connectResponse.Advice {
-					return fmt.Errorf("failed to receive event and no reconnection strategy provided by the server: %s", connectResponse.Error)
-				}
-
-				switch connectResponse.Advice.Reconnect {
-				case responses.AdviceReconnectRetry:
-					// Check if request can be retried
-					if connectResponse.Advice.Interval < 0 {
-						return fmt.Errorf("server disallowed for reconnect, stopping")
-					}
-
-					// Wait and retry
-					time.Sleep(time.Millisecond * time.Duration(connectResponse.Advice.Interval))
-
-					continue
-
-				case responses.AdviceReconnectHandshake:
-					// Handshake and retry
-					if _, err := s.streamingClient.Handshake(ctx); err != nil {
-						return fmt.Errorf("reconnect handshake error: %w", err)
-					}
-
-					continue
-
-				case responses.AdviceReconnectNone:
-					// Cannot retry
-					return fmt.Errorf("server disallowed for reconnect, stopping")
-
-				default:
-					// Unexpected, cannot retry
-					return fmt.Errorf("unsupported reconnect advice: %s", connectResponse.Advice.Reconnect)
-				}
-			}
-
-			// If successful, send event
-			for _, event := range connectResponse.Events {
-				if _, exists := s.subscriptions[event.Channel]; exists {
-					// Send out the record if possible
-					select {
-					case s.events <- event:
-						// opencdc.Record was sent successfully
-
-					case <-s.tomb.Dying():
-						return s.tomb.Err()
-					}
-				} else {
-					sdk.Logger(ctx).Debug().Msgf("Received event for unsupported channel: %s", event.Channel)
-				}
-			}
-		}
-	}
-}
-
-// getKeyValue prepares the Key value for Payload.
-func (s *Source) getKeyValue(event responses.ConnectResponseEvent) (opencdc.RawData, error) {
-	if s.config.KeyField == "" {
-		return nil, nil
+	if err := s.client.Close(ctx); err != nil {
+		return fmt.Errorf("error when closing subscriber conn: %w", err)
 	}
 
-	value, exists := event.Data.SObject[s.config.KeyField]
-	if !exists {
-		return nil, fmt.Errorf("the %q field does not exist in the data", s.config.KeyField)
-	}
-
-	switch v := value.(type) {
-	case string:
-		return opencdc.RawData(v), nil
-
-	case int, int8, int16, int32, int64,
-		uint, uint8, uint16, uint32, uint64:
-		return opencdc.RawData(fmt.Sprintf("%d", v)), nil
-
-	case float32, float64:
-		return opencdc.RawData(fmt.Sprintf("%G", v)), nil
-	}
-
-	return nil, fmt.Errorf("the %T type of Key field is not supported", value)
+	return nil
 }

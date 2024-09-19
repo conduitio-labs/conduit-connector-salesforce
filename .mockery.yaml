@@ -10,12 +10,12 @@ packages:
     interfaces:
       PubSubClient:
         config:
-          dir: source_pubsub
+          dir: source
           inpackage: false
           outpkg: source
       PubSub_SubscribeClient:
         config:
-          dir: source_pubsub
+          dir: source
           inpackage: false
           outpkg: source
   github.com/conduitio-labs/conduit-connector-salesforce/source:
