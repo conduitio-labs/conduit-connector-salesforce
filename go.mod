@@ -8,11 +8,9 @@ require (
 	github.com/conduitio/conduit-commons v0.3.0
 	github.com/conduitio/conduit-connector-sdk v0.10.1
 	github.com/golangci/golangci-lint v1.61.0
-	github.com/jaswdr/faker v1.19.1
 	github.com/linkedin/goavro/v2 v2.13.0
 	github.com/stretchr/testify v1.9.0
-	golang.org/x/net v0.29.0
-	google.golang.org/grpc v1.66.2
+	google.golang.org/grpc v1.67.0
 	google.golang.org/protobuf v1.34.3-0.20240816073751-94ecbc261689
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
@@ -32,6 +30,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/twmb/go-cache v1.2.1 // indirect
 	go.uber.org/mock v0.4.0 // indirect
+	golang.org/x/net v0.29.0 // indirect
 )
 
 require (
