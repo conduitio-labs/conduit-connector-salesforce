@@ -12,53 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package source
+package destination
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
-	"time"
+	"regexp"
 
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
+	"github.com/conduitio/conduit-commons/opencdc"
+)
 
-	sdk "github.com/conduitio/conduit-connector-sdk"
+type TopicFn func(opencdc.Record) (string, error)
+
+var (
+	topicRegex     = regexp.MustCompile(`^[a-zA-Z0-9._\-]+$`)
+	maxTopicLength = 249
 )
 
 //go:generate paramgen -output=paramgen_config.go Config
 type Config struct {
 	config.Config
 
-	// TopicName {WARN will be deprecated soon} the TopicName the source connector will subscribe to
+	// Topic is Salesforce event or topic to write record
 	TopicName string `json:"topicName"`
-
-	// TopicNames are the TopicNames the source connector will subscribe to
-	TopicNames []string `json:"topicNames"`
-
-	// PollingPeriod is the client event polling interval
-	PollingPeriod time.Duration `json:"pollingPeriod" default:"100ms"`
-
-	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
-	ReplayPreset string `json:"replayPreset" default:"earliest"`
 }
 
 func (c Config) Validate(ctx context.Context) (Config, error) {
 	var errs []error
 
-	if c.TopicName != "" {
-		sdk.Logger(ctx).Warn().
-			Msg(`"topicName" is deprecated, use "topicNames" instead.`)
-
-		c.TopicNames = slices.Compact(append(c.TopicNames, c.TopicName))
-	}
-
-	if len(c.TopicNames) == 0 {
+	if len(c.TopicName) == 0 {
 		errs = append(errs, fmt.Errorf("'topicNames' empty, need at least one topic"))
-	}
-
-	if c.PollingPeriod == 0 {
-		errs = append(errs, fmt.Errorf("polling period cannot be zero %d", c.PollingPeriod))
 	}
 
 	if len(errs) != 0 {

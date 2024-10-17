@@ -18,6 +18,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
+
+	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/config"
@@ -27,13 +30,13 @@ import (
 
 type client interface {
 	Next(context.Context) (opencdc.Record, error)
-	Initialize(context.Context) error
+	InitializeCDC(context.Context, string, position.Topics, []string, time.Duration) error
 	Stop(context.Context)
 	Close(context.Context) error
 	Wait(context.Context) error
 }
 
-var _ client = (*PubSubClient)(nil)
+var _ client = (*pubsub.PubSubClient)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
@@ -87,12 +90,12 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 		return fmt.Errorf("error parsing sdk position: %w", err)
 	}
 
-	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
+	client, err := pubsub.NewGRPCClient(ctx, s.config.Config)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
 
-	if err := client.Initialize(ctx); err != nil {
+	if err := client.InitializeCDC(ctx, s.config.ReplayPreset, parsedPositions, s.config.TopicNames, s.config.PollingPeriod); err != nil {
 		return fmt.Errorf("could not initialize pubsub client: %w", err)
 	}
 

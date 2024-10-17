@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package source
+package pubsub
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-type authenticator interface {
+type Authenticator interface {
 	Login() (*LoginResponse, error)
 	UserInfo(string) (*UserInfoResponse, error)
 }
@@ -70,7 +70,7 @@ type Credentials struct {
 func NewCredentials(clientID, secret, endpoint string) (Credentials, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return Credentials{}, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
+		return Credentials{}, fmt.Errorf("failed to parse OAuth endpoint url: %w", err)
 	}
 
 	return Credentials{
@@ -80,11 +80,11 @@ func NewCredentials(clientID, secret, endpoint string) (Credentials, error) {
 	}, nil
 }
 
-type oauth struct {
+type OAuth struct {
 	Credentials
 }
 
-func (a oauth) Login() (*LoginResponse, error) {
+func (a OAuth) Login() (*LoginResponse, error) {
 	body := url.Values{}
 	body.Set("grant_type", "client_credentials")
 	body.Set("client_id", a.ClientID)
@@ -107,7 +107,7 @@ func (a oauth) Login() (*LoginResponse, error) {
 
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http oauth request failed: %w", err)
+		return nil, fmt.Errorf("http OAuth request failed: %w", err)
 	}
 	defer httpResp.Body.Close()
 
@@ -118,14 +118,14 @@ func (a oauth) Login() (*LoginResponse, error) {
 
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(
-			"unexpected oauth login (status: %d) response: %w", httpResp.StatusCode, loginResp.Err(),
+			"unexpected OAuth login (status: %d) response: %w", httpResp.StatusCode, loginResp.Err(),
 		)
 	}
 
 	return &loginResp, nil
 }
 
-func (a oauth) UserInfo(accessToken string) (*UserInfoResponse, error) {
+func (a OAuth) UserInfo(accessToken string) (*UserInfoResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), OAuthDialTimeout)
 	defer cancel()
 
@@ -151,17 +151,17 @@ func (a oauth) UserInfo(accessToken string) (*UserInfoResponse, error) {
 
 	if httpResp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf(
-			"unexpected oauth userInfo (status: %d) response: %w", httpResp.StatusCode, userInfoResp.Err(),
+			"unexpected OAuth userInfo (status: %d) response: %w", httpResp.StatusCode, userInfoResp.Err(),
 		)
 	}
 
 	return &userInfoResp, nil
 }
 
-func (a oauth) loginURL() string {
+func (a OAuth) loginURL() string {
 	return a.OAuthEndpoint.JoinPath(loginEndpoint).String()
 }
 
-func (a oauth) userInfoURL() string {
+func (a OAuth) userInfoURL() string {
 	return a.OAuthEndpoint.JoinPath(userInfoEndpoint).String()
 }
