@@ -48,7 +48,7 @@ var (
 
 var ErrEndOfRecords = errors.New("end of records from stream")
 
-type PubSubClient struct {
+type Client struct {
 	mu sync.Mutex
 
 	accessToken  string
@@ -60,7 +60,7 @@ type PubSubClient struct {
 	oauth Authenticator
 
 	conn         *grpc.ClientConn
-	pubSubClient eventbusv1.PubSubClient
+	pubSubClient eventbusv1.Client
 
 	codecCache  map[string]*goavro.Codec
 	unionFields map[string]map[string]struct{}
@@ -91,7 +91,7 @@ type ConnectResponseEvent struct {
 }
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
-func NewGRPCClient(ctx context.Context, config config.Config) (*PubSubClient, error) {
+func NewGRPCClient(ctx context.Context, config config.Config) (*Client, error) {
 	sdk.Logger(ctx).Info().
 		Msgf("Starting GRPC client")
 
@@ -118,7 +118,7 @@ func NewGRPCClient(ctx context.Context, config config.Config) (*PubSubClient, er
 		return nil, err
 	}
 
-	return &PubSubClient{
+	return &Client{
 		conn:         conn,
 		pubSubClient: eventbusv1.NewPubSubClient(conn),
 		codecCache:   make(map[string]*goavro.Codec),
@@ -131,7 +131,7 @@ func NewGRPCClient(ctx context.Context, config config.Config) (*PubSubClient, er
 }
 
 // Initializes the pubsub client by authenticating for source and destination.
-func (c *PubSubClient) Initialize(ctx context.Context, topics []string) error {
+func (c *Client) Initialize(ctx context.Context, topics []string) error {
 	c.topicNames = topics
 
 	if err := c.login(ctx); err != nil {
@@ -146,7 +146,7 @@ func (c *PubSubClient) Initialize(ctx context.Context, topics []string) error {
 }
 
 // Start CDC Routine for Source.
-func (c *PubSubClient) StartCDC(ctx context.Context, replay string, currentPos position.Topics, topics []string, fetch time.Duration) error {
+func (c *Client) StartCDC(ctx context.Context, replay string, currentPos position.Topics, topics []string, fetch time.Duration) error {
 	sdk.Logger(ctx).Info().Msgf("Initizalizing PubSub client for source cdc")
 
 	if replay == "latest" {
@@ -188,7 +188,7 @@ func (c *PubSubClient) StartCDC(ctx context.Context, replay string, currentPos p
 }
 
 // Next returns the next record from the buffer.
-func (c *PubSubClient) Next(ctx context.Context) (opencdc.Record, error) {
+func (c *Client) Next(ctx context.Context) (opencdc.Record, error) {
 	select {
 	case <-ctx.Done():
 		return opencdc.Record{}, fmt.Errorf("next: context done: %w", ctx.Err())
@@ -204,7 +204,7 @@ func (c *PubSubClient) Next(ctx context.Context) (opencdc.Record, error) {
 }
 
 // Stop ends CDC processing.
-func (c *PubSubClient) Stop(ctx context.Context) {
+func (c *Client) Stop(ctx context.Context) {
 	if c.stop != nil {
 		c.stop()
 	}
@@ -215,7 +215,7 @@ func (c *PubSubClient) Stop(ctx context.Context) {
 	c.topicNames = nil
 }
 
-func (c *PubSubClient) Wait(ctx context.Context) error {
+func (c *Client) Wait(ctx context.Context) error {
 	tctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
@@ -232,7 +232,7 @@ func (c *PubSubClient) Wait(ctx context.Context) error {
 }
 
 // Closes the underlying connection to the gRPC server.
-func (c *PubSubClient) Close(ctx context.Context) error {
+func (c *Client) Close(ctx context.Context) error {
 	if c.conn != nil {
 		sdk.Logger(ctx).Debug().Msg("closing pubsub gRPC connection")
 
@@ -244,7 +244,7 @@ func (c *PubSubClient) Close(ctx context.Context) error {
 	return nil
 }
 
-func (c *PubSubClient) GetTopic(topic string) (*eventbusv1.TopicInfo, error) {
+func (c *Client) GetTopic(topic string) (*eventbusv1.TopicInfo, error) {
 	var trailer metadata.MD
 
 	req := &eventbusv1.TopicRequest{
@@ -262,7 +262,7 @@ func (c *PubSubClient) GetTopic(topic string) (*eventbusv1.TopicInfo, error) {
 }
 
 // Wrapper function around the GetSchema RPC. This will add the OAuth credentials and make a call to fetch data about a specific schema.
-func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
+func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 	var trailer metadata.MD
 
 	req := &eventbusv1.SchemaRequest{
@@ -286,7 +286,7 @@ func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error
 	return resp, nil
 }
 
-func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) error {
+func (c *Client) Publish(ctx context.Context, records []opencdc.Record) error {
 	var events []*eventbusv1.ProducerEvent
 	// TODO - refactor the way we access the topic
 	topic, err := c.GetTopic(c.topicNames[0])
@@ -311,7 +311,7 @@ func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) er
 			return fmt.Errorf("error marshaling data: %s", err)
 		}
 
-		avroPrepared, err := validateAndPreparePayload(dataMap, codec.Schema(), c.unionFields[topic.SchemaId])
+		avroPrepared, err := validateAndPreparePayload(dataMap, codec.Schema())
 		if err != nil {
 			return fmt.Errorf("error validating and preparing avro data:%s", err)
 		}
@@ -356,7 +356,7 @@ func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) er
 // fetch data from the topic. This method will continuously consume messages unless an error occurs; if an error does occur then this method will,
 // return the last successfully consumed replayID as well as the error message. If no messages were successfully consumed then this method will return,
 // the same replayID that it originally received as a parameter.
-func (c *PubSubClient) Subscribe(
+func (c *Client) Subscribe(
 	ctx context.Context,
 	replayPreset eventbusv1.ReplayPreset,
 	replayID []byte,
@@ -408,7 +408,7 @@ func (c *PubSubClient) Subscribe(
 	return subscribeClient, nil
 }
 
-func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) ([]ConnectResponseEvent, error) {
+func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]ConnectResponseEvent, error) {
 	var (
 		preset = c.replayPreset
 		start  = time.Now().UTC()
@@ -517,9 +517,9 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 	return events, nil
 }
 
-// Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache,
+// Unexported helper function to retrieve the cached codec from the Client's schema cache. If the schema ID is not found in the cache,
 // then a GetSchema call is made and the corresponding codec is cached for future use.
-func (c *PubSubClient) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
+func (c *Client) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
 	logger := sdk.Logger(ctx).
 		With().
 		Str("at", "client.fetchcodec").
@@ -564,7 +564,7 @@ const (
 )
 
 // Returns a new context with the necessary authentication parameters for the gRPC server.
-func (c *PubSubClient) getAuthContext() context.Context {
+func (c *Client) getAuthContext() context.Context {
 	pairs := metadata.Pairs(
 		tokenHeader, c.accessToken,
 		instanceHeader, c.instanceURL,
@@ -574,7 +574,7 @@ func (c *PubSubClient) getAuthContext() context.Context {
 	return metadata.NewOutgoingContext(context.Background(), pairs)
 }
 
-func (c *PubSubClient) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
+func (c *Client) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
 	var err error
 	sdk.Logger(ctx).Info().Msgf("retry connection on topic %s - retries remaining %d ", topic.topicName, topic.retryCount)
 	topic.retryCount--
@@ -599,7 +599,7 @@ func (c *PubSubClient) retryAuth(ctx context.Context, retry bool, topic Topic) (
 	return retry, topic, nil
 }
 
-func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
+func (c *Client) startCDC(ctx context.Context, topic Topic) error {
 	sdk.Logger(ctx).Info().
 		Str("topic", topic.topicName).
 		Str("replayID", string(c.currentPos.TopicReplayID(topic.topicName))).
@@ -697,7 +697,7 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 	}
 }
 
-func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (opencdc.Record, error) {
+func (c *Client) buildRecord(event ConnectResponseEvent) (opencdc.Record, error) {
 	// TODO - ADD something here to distinguish creates, deletes, updates.
 	err := c.currentPos.SetTopicReplayID(event.Topic, event.ReplayID)
 	if err != nil {
@@ -724,7 +724,7 @@ func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (opencdc.Record, 
 	), nil
 }
 
-func (c *PubSubClient) login(ctx context.Context) error {
+func (c *Client) login(ctx context.Context) error {
 	authResp, err := c.oauth.Login()
 	if err != nil {
 		return err
@@ -754,11 +754,10 @@ func (c *PubSubClient) login(ctx context.Context) error {
 }
 
 // Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic.
-func (c *PubSubClient) canAccessTopic(ctx context.Context, accessLevel string) error {
+func (c *Client) canAccessTopic(ctx context.Context, accessLevel string) error {
 	logger := sdk.Logger(ctx).With().Str("at", "client.canAccessTopic").Logger()
 
 	for _, topic := range c.topicNames {
-
 		resp, err := c.GetTopic(topic)
 		if err != nil {
 			return fmt.Errorf(" error retrieving info on topic %s : %s ", topic, err)

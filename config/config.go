@@ -29,7 +29,7 @@ type Config struct {
 	RetryCount uint `json:"retryCount" default:"10"`
 }
 
-func (c Config) Validate(ctx context.Context) (Config, error) {
+func (c Config) Validate(_ context.Context) (Config, error) {
 	var errs []error
 
 	// Validate provided fields

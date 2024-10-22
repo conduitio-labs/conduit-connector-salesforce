@@ -12,7 +12,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-var _ client = (*pubsub.PubSubClient)(nil)
+var _ client = (*pubsub.Client)(nil)
 
 type client interface {
 	Stop(context.Context)

@@ -40,7 +40,7 @@ package pubsub
 // 		nil,
 // 	)
 
-// 	c := &PubSubClient{
+// 	c := &Client{
 // 		oauth:         mockAuth,
 // 		pubSubClient:  mockPubSubClient,
 // 		buffer:        make(chan ConnectResponseEvent),

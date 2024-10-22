@@ -30,7 +30,7 @@ const (
 	PubSub_ManagedSubscribe_FullMethodName = "/eventbus.v1.PubSub/ManagedSubscribe"
 )
 
-// PubSubClient is the client API for PubSub service.
+// Client is the client API for PubSub service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
@@ -51,7 +51,7 @@ const (
 //	tenantid : tenant/org id of the client
 //
 // StatusException is thrown in case of response failure for any request.
-type PubSubClient interface {
+type Client interface {
 	// Bidirectional streaming RPC to subscribe to a Topic. The subscription is pull-based. A client can request
 	// for more events as it consumes events. This enables a client to handle flow control based on the client's processing speed.
 	//
@@ -118,7 +118,7 @@ type pubSubClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewPubSubClient(cc grpc.ClientConnInterface) PubSubClient {
+func NewPubSubClient(cc grpc.ClientConnInterface) Client {
 	return &pubSubClient{cc}
 }
 

@@ -57,7 +57,7 @@ func flattenUnionFields(_ context.Context, data map[string]interface{}, unionFie
 	return flatData
 }
 
-// checks connection error
+// checks connection error.
 func connErr(err error) bool {
 	msg := err.Error()
 
@@ -68,7 +68,7 @@ func invalidReplayIDErr(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "replay id validation failed")
 }
 
-func validateAndPreparePayload(dataMap map[string]interface{}, avroSchema string, unionFields map[string]struct{}) (map[string]interface{}, error) {
+func validateAndPreparePayload(dataMap map[string]interface{}, avroSchema string) (map[string]interface{}, error) {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(avroSchema), &schema); err != nil {
 		return nil, err
@@ -86,18 +86,16 @@ func validateAndPreparePayload(dataMap map[string]interface{}, avroSchema string
 			avroRecord[fieldName] = nil
 			continue
 		}
-		if _, ok := unionFields[fieldName]; ok && value != nil {
-			switch t := fieldType.(type) {
-			case []interface{}:
-				for _, unionType := range t {
-					if unionType.(string) != "null" {
-						avroRecord[fieldName] = map[string]interface{}{
-							unionType.(string): value,
-						}
+		switch t := fieldType.(type) {
+		case []interface{}:
+			for _, unionType := range t {
+				if unionType.(string) != "null" {
+					avroRecord[fieldName] = map[string]interface{}{
+						unionType.(string): value,
 					}
 				}
 			}
-		} else {
+		default:
 			avroRecord[fieldName] = value
 		}
 	}

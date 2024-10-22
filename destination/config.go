@@ -18,18 +18,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 )
 
 type TopicFn func(opencdc.Record) (string, error)
-
-var (
-	topicRegex     = regexp.MustCompile(`^[a-zA-Z0-9._\-]+$`)
-	maxTopicLength = 249
-)
 
 //go:generate paramgen -output=paramgen_config.go Config
 type Config struct {
@@ -39,7 +33,7 @@ type Config struct {
 	TopicName string `json:"topicName"`
 }
 
-func (c Config) Validate(ctx context.Context) (Config, error) {
+func (c Config) Validate(_ context.Context) (Config, error) {
 	var errs []error
 
 	if len(c.TopicName) == 0 {

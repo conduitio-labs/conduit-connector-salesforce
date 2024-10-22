@@ -8,7 +8,7 @@ dir: "{{.InterfaceDir}}"
 packages:
   github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1:
     interfaces:
-      PubSubClient:
+      Client:
         config:
           dir: source
           inpackage: false
