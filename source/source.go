@@ -30,7 +30,8 @@ import (
 
 type client interface {
 	Next(context.Context) (opencdc.Record, error)
-	InitializeCDC(context.Context, string, position.Topics, []string, time.Duration) error
+	Initialize(context.Context, []string) error
+	StartCDC(context.Context, string, position.Topics, []string, time.Duration) error
 	Stop(context.Context)
 	Close(context.Context) error
 	Wait(context.Context) error
@@ -95,7 +96,11 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
 
-	if err := client.InitializeCDC(ctx, s.config.ReplayPreset, parsedPositions, s.config.TopicNames, s.config.PollingPeriod); err != nil {
+	if err := client.Initialize(ctx, s.config.TopicNames); err != nil {
+		return fmt.Errorf("could not initialize pubsub client: %w", err)
+	}
+
+	if err := client.StartCDC(ctx, s.config.ReplayPreset, parsedPositions, s.config.TopicNames, s.config.PollingPeriod); err != nil {
 		return fmt.Errorf("could not initialize pubsub client: %w", err)
 	}
 

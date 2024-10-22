@@ -130,8 +130,9 @@ func NewGRPCClient(ctx context.Context, config config.Config) (*PubSubClient, er
 	}, nil
 }
 
-func (c *PubSubClient) InitializeWrite(ctx context.Context, topic string) error {
-	c.topicNames = append(c.topicNames, topic)
+// Initializes the pubsub client by authenticating for source and destination.
+func (c *PubSubClient) Initialize(ctx context.Context, topics []string) error {
+	c.topicNames = topics
 
 	if err := c.login(ctx); err != nil {
 		return err
@@ -144,8 +145,8 @@ func (c *PubSubClient) InitializeWrite(ctx context.Context, topic string) error 
 	return nil
 }
 
-// Initializes the pubsub client by authenticating and starting cdc routine.
-func (c *PubSubClient) InitializeCDC(ctx context.Context, replay string, currentPos position.Topics, topics []string, fetch time.Duration) error {
+// Start CDC Routine for Source.
+func (c *PubSubClient) StartCDC(ctx context.Context, replay string, currentPos position.Topics, topics []string, fetch time.Duration) error {
 	sdk.Logger(ctx).Info().Msgf("Initizalizing PubSub client for source cdc")
 
 	if replay == "latest" {
@@ -154,21 +155,11 @@ func (c *PubSubClient) InitializeCDC(ctx context.Context, replay string, current
 		c.replayPreset = eventbusv1.ReplayPreset_EARLIEST
 	}
 
-	// set topics on source
+	// set topics and position on source
 	currentPos.SetTopics(topics)
 	c.currentPos = currentPos
-	c.topicNames = topics
-
 	// set fetch for ticket
 	c.fetchInterval = fetch
-
-	if err := c.login(ctx); err != nil {
-		return err
-	}
-
-	if err := c.canAccessTopic(ctx, subscribe); err != nil {
-		return err
-	}
 
 	stopCtx, cancel := context.WithCancel(ctx)
 	c.stop = cancel
@@ -297,11 +288,15 @@ func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error
 
 func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) error {
 	var events []*eventbusv1.ProducerEvent
-	//TODO - refactor the way we access the topic
+	// TODO - refactor the way we access the topic
 	topic, err := c.GetTopic(c.topicNames[0])
 	if err != nil {
 		return fmt.Errorf("error on publish, cannot retrieve topic %s : %s", c.topicNames[0], err)
 	}
+
+	sdk.Logger(ctx).Info().
+		Str("topic", topic.TopicName).
+		Msg("Started publishing event")
 
 	codec, err := c.fetchCodec(ctx, topic.SchemaId)
 	if err != nil {
@@ -316,7 +311,7 @@ func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) er
 			return fmt.Errorf("error marshaling data: %s", err)
 		}
 
-		avroPrepared, err := validateAndPreparePayload(dataMap, codec.Schema())
+		avroPrepared, err := validateAndPreparePayload(dataMap, codec.Schema(), c.unionFields[topic.SchemaId])
 		if err != nil {
 			return fmt.Errorf("error validating and preparing avro data:%s", err)
 		}
@@ -338,12 +333,21 @@ func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) er
 		Events:    events,
 	}
 
+	sdk.Logger(ctx).Info().
+		Str("topic", topic.TopicName).
+		Str("number of events", string(len(events))).
+		Msg("Events created, attempting to publish")
+
 	resp, err := c.pubSubClient.Publish(c.getAuthContext(), &publishRequest)
 	if err != nil {
 		return fmt.Errorf("error on publishing event: %s", err)
 	}
-	fmt.Println("Publish request sent!")
-	fmt.Println(resp)
+
+	sdk.Logger(ctx).Info().
+		Str("topic", topic.TopicName).
+		Str("resp", resp.String()).
+		Str("resp rpc id", resp.RpcId).
+		Msg("Events published")
 
 	return nil
 }
@@ -484,24 +488,15 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 			Str("event_id", e.Event.Id).
 			Msg("decoding event")
 
-		fmt.Println("Event")
-		fmt.Println(string(e.Event.Payload))
-
 		codec, err := c.fetchCodec(ctx, e.Event.SchemaId)
 		if err != nil {
 			return events, err
 		}
 
-		fmt.Println("Code fetched")
-		fmt.Println(codec)
-
 		parsed, _, err := codec.NativeFromBinary(e.Event.Payload)
 		if err != nil {
 			return events, err
 		}
-
-		fmt.Println("Parsed event")
-		fmt.Println(parsed)
 
 		payload, ok := parsed.(map[string]interface{})
 		if !ok {
@@ -772,9 +767,6 @@ func (c *PubSubClient) canAccessTopic(ctx context.Context, accessLevel string) e
 		if accessLevel == subscribe && !resp.CanSubscribe {
 			return fmt.Errorf("user %q not allowed to subscribe to %q", c.userID, resp.TopicName)
 		}
-
-		fmt.Println("CAN PUBLISH?")
-		fmt.Println(resp.CanPublish)
 
 		if accessLevel == publish && !resp.CanPublish {
 			return fmt.Errorf("user %q not allowed to publish to %q", c.userID, resp.TopicName)

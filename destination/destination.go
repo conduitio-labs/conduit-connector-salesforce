@@ -17,7 +17,7 @@ var _ client = (*pubsub.PubSubClient)(nil)
 type client interface {
 	Stop(context.Context)
 	Close(context.Context) error
-	InitializeWrite(context.Context, string) error
+	Initialize(context.Context, []string) error
 	Publish(context.Context, []opencdc.Record) error
 }
 
@@ -64,7 +64,7 @@ func (d *Destination) Open(ctx context.Context) error {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}
 
-	if err := client.InitializeWrite(ctx, d.config.TopicName); err != nil {
+	if err := client.Initialize(ctx, []string{d.config.TopicName}); err != nil {
 		return fmt.Errorf("could not initialize pubsub client: %w", err)
 	}
 
