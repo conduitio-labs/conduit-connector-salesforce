@@ -335,7 +335,7 @@ func (c *PubSubClient) Publish(ctx context.Context, records []opencdc.Record) er
 
 	sdk.Logger(ctx).Info().
 		Str("topic", topic.TopicName).
-		Str("number of events", string(len(events))).
+		Int("number of events", len(events)).
 		Msg("Events created, attempting to publish")
 
 	resp, err := c.pubSubClient.Publish(c.getAuthContext(), &publishRequest)
