@@ -60,7 +60,7 @@ type Client struct {
 	oauth Authenticator
 
 	conn         *grpc.ClientConn
-	pubSubClient eventbusv1.Client
+	pubSubClient eventbusv1.PubSubClient
 
 	codecCache  map[string]*goavro.Codec
 	unionFields map[string]map[string]struct{}

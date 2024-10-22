@@ -14,46 +14,49 @@
 
 package pubsub
 
-// func TestPubSubClient_Initialize(t *testing.T) {
-// 	mockAuth := auth.newMockAuthenticator(t)
-// 	ctx := context.Background()
+import (
+	"context"
+	"testing"
+	"time"
 
-// 	mockAuth.EXPECT().
-// 		Login().
-// 		Return(&LoginResponse{AccessToken: "token", InstanceURL: "instance-url"}, nil)
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
+	mock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+)
 
-// 	mockAuth.EXPECT().
-// 		UserInfo("token").
-// 		Return(
-// 			&UserInfoResponse{UserID: "my-user-id", OrganizationID: "org-id"},
-// 			nil,
-// 		)
+func TestPubSubClient_Initialize(t *testing.T) {
+	mockAuth := newMockAuthenticator(t)
+	ctx := context.Background()
 
-// 	mockPubSubClient := newMockPubSubClient(t)
+	mockAuth.EXPECT().
+		Login().
+		Return(&LoginResponse{AccessToken: "token", InstanceURL: "instance-url"}, nil)
 
-// 	mockPubSubClient.EXPECT().GetTopic(
-// 		mock.Anything,
-// 		&eventbusv1.TopicRequest{TopicName: "my-topic"},
-// 		mock.Anything,
-// 	).Return(
-// 		&eventbusv1.TopicInfo{TopicName: "my-topic", CanSubscribe: true},
-// 		nil,
-// 	)
+	mockAuth.EXPECT().
+		UserInfo("token").
+		Return(
+			&UserInfoResponse{UserID: "my-user-id", OrganizationID: "org-id"},
+			nil,
+		)
 
-// 	c := &Client{
-// 		oauth:         mockAuth,
-// 		pubSubClient:  mockPubSubClient,
-// 		buffer:        make(chan ConnectResponseEvent),
-// 		topicNames:    []string{"my-topic"},
-// 		fetchInterval: time.Second * 1,
-// 	}
+	mockPubSubClient := newMockPubSubClient(t)
 
-// 	require.NoError(t, c.Initialize(ctx))
-// 	require.True(t, c.tomb.Alive())
+	mockPubSubClient.EXPECT().GetTopic(
+		mock.Anything,
+		&eventbusv1.TopicRequest{TopicName: "my-topic"},
+		mock.Anything,
+	).Return(
+		&eventbusv1.TopicInfo{TopicName: "my-topic", CanSubscribe: true, CanPublish: true},
+		nil,
+	)
 
-// 	c.Stop(ctx)
-// 	err := c.Wait(context.Background())
-// 	require.Error(t, err)
-// 	require.ErrorIs(t, err, context.Canceled)
-// 	require.ErrorIs(t, c.tomb.Wait(), context.Canceled)
-// }
+	c := &Client{
+		oauth:         mockAuth,
+		pubSubClient:  mockPubSubClient,
+		buffer:        make(chan ConnectResponseEvent),
+		topicNames:    []string{"my-topic"},
+		fetchInterval: time.Second * 1,
+	}
+
+	require.NoError(t, c.Initialize(ctx, c.topicNames))
+}

@@ -30,7 +30,7 @@ const (
 	PubSub_ManagedSubscribe_FullMethodName = "/eventbus.v1.PubSub/ManagedSubscribe"
 )
 
-// Client is the client API for PubSub service.
+// PubSubClient is the client API for PubSub service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
@@ -51,15 +51,15 @@ const (
 //	tenantid : tenant/org id of the client
 //
 // StatusException is thrown in case of response failure for any request.
-type Client interface {
+type PubSubClient interface {
 	// Bidirectional streaming RPC to subscribe to a Topic. The subscription is pull-based. A client can request
 	// for more events as it consumes events. This enables a client to handle flow control based on the client's processing speed.
 	//
 	// Typical flow:
-	//  1. Client requests for X number of events via FetchRequest.
+	//  1. PubSubClient requests for X number of events via FetchRequest.
 	//  2. Server receives request and delivers events until X events are delivered to the client via one or more FetchResponse messages.
-	//  3. Client consumes the FetchResponse messages as they come.
-	//  4. Client issues new FetchRequest for Y more number of events. This request can
+	//  3. PubSubClient consumes the FetchResponse messages as they come.
+	//  4. PubSubClient issues new FetchRequest for Y more number of events. This request can
 	//     come before the server has delivered the earlier requested X number of events
 	//     so the client gets a continuous stream of events if any.
 	//
@@ -118,7 +118,7 @@ type pubSubClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewPubSubClient(cc grpc.ClientConnInterface) Client {
+func NewPubSubClient(cc grpc.ClientConnInterface) PubSubClient {
 	return &pubSubClient{cc}
 }
 
@@ -274,10 +274,10 @@ type PubSubServer interface {
 	// for more events as it consumes events. This enables a client to handle flow control based on the client's processing speed.
 	//
 	// Typical flow:
-	//  1. Client requests for X number of events via FetchRequest.
+	//  1. PubSubClient requests for X number of events via FetchRequest.
 	//  2. Server receives request and delivers events until X events are delivered to the client via one or more FetchResponse messages.
-	//  3. Client consumes the FetchResponse messages as they come.
-	//  4. Client issues new FetchRequest for Y more number of events. This request can
+	//  3. PubSubClient consumes the FetchResponse messages as they come.
+	//  4. PubSubClient issues new FetchRequest for Y more number of events. This request can
 	//     come before the server has delivered the earlier requested X number of events
 	//     so the client gets a continuous stream of events if any.
 	//
