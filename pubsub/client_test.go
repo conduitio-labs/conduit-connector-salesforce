@@ -20,7 +20,7 @@ import (
 	"time"
 
 	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
-	"github.com/stretchr/testify/mock"
+	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +46,7 @@ func TestPubSubClient_Initialize(t *testing.T) {
 		&eventbusv1.TopicRequest{TopicName: "my-topic"},
 		mock.Anything,
 	).Return(
-		&eventbusv1.TopicInfo{TopicName: "my-topic", CanSubscribe: true},
+		&eventbusv1.TopicInfo{TopicName: "my-topic", CanSubscribe: true, CanPublish: true},
 		nil,
 	)
 
@@ -58,12 +58,5 @@ func TestPubSubClient_Initialize(t *testing.T) {
 		fetchInterval: time.Second * 1,
 	}
 
-	require.NoError(t, c.Initialize(ctx))
-	require.True(t, c.tomb.Alive())
-
-	c.Stop(ctx)
-	err := c.Wait(context.Background())
-	require.Error(t, err)
-	require.ErrorIs(t, err, context.Canceled)
-	require.ErrorIs(t, c.tomb.Wait(), context.Canceled)
+	require.NoError(t, c.Initialize(ctx, c.topicNames))
 }

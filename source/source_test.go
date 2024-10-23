@@ -47,11 +47,11 @@ func Test_Read(t *testing.T) {
 		ClientID:      "test-client-id",
 		ClientSecret:  "test-client-secret",
 		OAuthEndpoint: "https://somewhere",
-		TopicNames:    []string{"/events/TestEvent__e", "/events/TestEvent2__e"},
 	}
 
 	testConfig := Config{
-		Config: config,
+		Config:     config,
+		TopicNames: []string{"/events/TestEvent__e", "/events/TestEvent2__e"},
 	}
 
 	testCases := []struct {

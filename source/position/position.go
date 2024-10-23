@@ -2,10 +2,10 @@ package position
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/pkg/errors"
 )
 
 type Topics struct {
@@ -30,7 +30,7 @@ func ParseSDKPosition(sdkPos opencdc.Position, topic string) (Topics, error) {
 	err := json.Unmarshal(sdkPos, &p)
 	if err != nil {
 		if topic == "" {
-			return p, fmt.Errorf("could not parsed sdk position %v: %w", sdkPos, err)
+			return p, errors.Errorf("could not parsed sdk position %v: %s", sdkPos, err)
 		}
 
 		p.SetTopics([]string{topic})
@@ -75,7 +75,7 @@ func (p Topics) SetTopicReplayID(topic string, replayID []byte) error {
 			}
 		} else {
 			// should never be even reaching this point, something went wrong if we do
-			return fmt.Errorf("attempting to set replay id - %b on topic %s, topic doesn't exist on position", replayID, topic)
+			return errors.Errorf("attempting to set replay id - %b on topic %s, topic doesn't exist on position", replayID, topic)
 		}
 	}
 	return nil
