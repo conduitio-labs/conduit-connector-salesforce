@@ -25,7 +25,6 @@ type Config struct {
 	config.Config
 }
 
-func (c Config) Validate(ctx context.Context) (Config, error) {
-
+func (c Config) Validate(_ context.Context) (Config, error) {
 	return c, nil
 }

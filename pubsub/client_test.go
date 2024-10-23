@@ -50,7 +50,7 @@ func TestPubSubClient_Initialize(t *testing.T) {
 		nil,
 	)
 
-	c := &PubSubClient{
+	c := &Client{
 		oauth:         mockAuth,
 		pubSubClient:  mockPubSubClient,
 		buffer:        make(chan ConnectResponseEvent),

@@ -16,9 +16,7 @@ package pubsub
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -47,7 +45,7 @@ var (
 
 var ErrEndOfRecords = errors.New("end of records from stream")
 
-type PubSubClient struct {
+type Client struct {
 	mu sync.Mutex
 
 	accessToken  string
@@ -90,7 +88,7 @@ type ConnectResponseEvent struct {
 }
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
-func NewGRPCClient(ctx context.Context, config config.Config, currentPos position.Topics) (*PubSubClient, error) {
+func NewGRPCClient(ctx context.Context, config config.Config, currentPos position.Topics) (*Client, error) {
 	sdk.Logger(ctx).Info().
 		Strs("topics", config.TopicNames).
 		Msgf("Starting GRPC client")
@@ -126,7 +124,7 @@ func NewGRPCClient(ctx context.Context, config config.Config, currentPos positio
 
 	currentPos.SetTopics(config.TopicNames)
 
-	return &PubSubClient{
+	return &Client{
 		conn:          conn,
 		pubSubClient:  eventbusv1.NewPubSubClient(conn),
 		codecCache:    make(map[string]*goavro.Codec),
@@ -142,7 +140,7 @@ func NewGRPCClient(ctx context.Context, config config.Config, currentPos positio
 }
 
 // Initializes the pubsub client by authenticating and.
-func (c *PubSubClient) Initialize(ctx context.Context) error {
+func (c *Client) Initialize(ctx context.Context) error {
 	sdk.Logger(ctx).Info().Msgf("Initizalizing PubSub client")
 
 	if err := c.login(ctx); err != nil {
@@ -179,7 +177,7 @@ func (c *PubSubClient) Initialize(ctx context.Context) error {
 	return nil
 }
 
-func (c *PubSubClient) login(ctx context.Context) error {
+func (c *Client) login(ctx context.Context) error {
 	authResp, err := c.oauth.Login()
 	if err != nil {
 		return err
@@ -209,7 +207,7 @@ func (c *PubSubClient) login(ctx context.Context) error {
 }
 
 // Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic.
-func (c *PubSubClient) canSubscribe(ctx context.Context) error {
+func (c *Client) canSubscribe(ctx context.Context) error {
 	var trailer metadata.MD
 
 	logger := sdk.Logger(ctx).With().Str("at", "client.canSubscribe").Logger()
@@ -242,7 +240,7 @@ func (c *PubSubClient) canSubscribe(ctx context.Context) error {
 }
 
 // Next returns the next record from the buffer.
-func (c *PubSubClient) Next(ctx context.Context) (opencdc.Record, error) {
+func (c *Client) Next(ctx context.Context) (opencdc.Record, error) {
 	select {
 	case <-ctx.Done():
 		return opencdc.Record{}, fmt.Errorf("next: context done: %w", ctx.Err())
@@ -258,7 +256,7 @@ func (c *PubSubClient) Next(ctx context.Context) (opencdc.Record, error) {
 }
 
 // Stop ends CDC processing.
-func (c *PubSubClient) Stop(ctx context.Context) {
+func (c *Client) Stop(ctx context.Context) {
 	if c.stop != nil {
 		c.stop()
 	}
@@ -269,7 +267,7 @@ func (c *PubSubClient) Stop(ctx context.Context) {
 	c.topicNames = nil
 }
 
-func (c *PubSubClient) Wait(ctx context.Context) error {
+func (c *Client) Wait(ctx context.Context) error {
 	tctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
@@ -285,7 +283,7 @@ func (c *PubSubClient) Wait(ctx context.Context) error {
 	}
 }
 
-func (c *PubSubClient) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
+func (c *Client) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
 	var err error
 	sdk.Logger(ctx).Info().Msgf("retry connection on topic %s - retries remaining %d ", topic.topicName, topic.retryCount)
 	topic.retryCount--
@@ -310,7 +308,7 @@ func (c *PubSubClient) retryAuth(ctx context.Context, retry bool, topic Topic) (
 	return retry, topic, nil
 }
 
-func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
+func (c *Client) startCDC(ctx context.Context, topic Topic) error {
 	sdk.Logger(ctx).Info().
 		Str("topic", topic.topicName).
 		Str("replayID", string(c.currentPos.TopicReplayID(topic.topicName))).
@@ -370,7 +368,7 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 					Msgf("received error on event receive: %v", err)
 
 				if topic.retryCount > 0 {
-					if c.invalidReplayIDErr(err) {
+					if invalidReplayIDErr(err) {
 						sdk.Logger(ctx).Error().Err(err).
 							Str("topic", topic.topicName).
 							Str("replayID", string(topic.replayID)).
@@ -408,17 +406,7 @@ func (c *PubSubClient) startCDC(ctx context.Context, topic Topic) error {
 	}
 }
 
-func (*PubSubClient) invalidReplayIDErr(err error) bool {
-	return strings.Contains(strings.ToLower(err.Error()), "replay id validation failed")
-}
-
-func (*PubSubClient) connErr(err error) bool {
-	msg := err.Error()
-
-	return strings.Contains(msg, "is unavailable")
-}
-
-func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (opencdc.Record, error) {
+func (c *Client) buildRecord(event ConnectResponseEvent) (opencdc.Record, error) {
 	// TODO - ADD something here to distinguish creates, deletes, updates.
 	err := c.currentPos.SetTopicReplayID(event.Topic, event.ReplayID)
 	if err != nil {
@@ -446,7 +434,7 @@ func (c *PubSubClient) buildRecord(event ConnectResponseEvent) (opencdc.Record, 
 }
 
 // Closes the underlying connection to the gRPC server.
-func (c *PubSubClient) Close(ctx context.Context) error {
+func (c *Client) Close(ctx context.Context) error {
 	if c.conn != nil {
 		sdk.Logger(ctx).Debug().Msg("closing pubsub gRPC connection")
 
@@ -459,7 +447,7 @@ func (c *PubSubClient) Close(ctx context.Context) error {
 }
 
 // Wrapper function around the GetSchema RPC. This will add the OAuth credentials and make a call to fetch data about a specific schema.
-func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
+func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 	var trailer metadata.MD
 
 	req := &eventbusv1.SchemaRequest{
@@ -487,7 +475,7 @@ func (c *PubSubClient) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error
 // fetch data from the topic. This method will continuously consume messages unless an error occurs; if an error does occur then this method will,
 // return the last successfully consumed replayID as well as the error message. If no messages were successfully consumed then this method will return,
 // the same replayID that it originally received as a parameter.
-func (c *PubSubClient) Subscribe(
+func (c *Client) Subscribe(
 	ctx context.Context,
 	replayPreset eventbusv1.ReplayPreset,
 	replayID []byte,
@@ -539,7 +527,7 @@ func (c *PubSubClient) Subscribe(
 	return subscribeClient, nil
 }
 
-func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) ([]ConnectResponseEvent, error) {
+func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]ConnectResponseEvent, error) {
 	var (
 		preset = c.replayPreset
 		start  = time.Now().UTC()
@@ -584,7 +572,7 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 		if errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("pubsub: stream closed when receiving events: %w", err)
 		}
-		if c.connErr(err) {
+		if connErr(err) {
 			logger.Warn().
 				Str("preset", preset.String()).
 				Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
@@ -650,7 +638,7 @@ func (c *PubSubClient) Recv(ctx context.Context, topic string, replayID []byte) 
 
 // Unexported helper function to retrieve the cached codec from the PubSubClient's schema cache. If the schema ID is not found in the cache,
 // then a GetSchema call is made and the corresponding codec is cached for future use.
-func (c *PubSubClient) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
+func (c *Client) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
 	logger := sdk.Logger(ctx).
 		With().
 		Str("at", "client.fetchcodec").
@@ -695,7 +683,7 @@ const (
 )
 
 // Returns a new context with the necessary authentication parameters for the gRPC server.
-func (c *PubSubClient) getAuthContext() context.Context {
+func (c *Client) getAuthContext() context.Context {
 	pairs := metadata.Pairs(
 		tokenHeader, c.accessToken,
 		instanceHeader, c.instanceURL,
@@ -703,53 +691,4 @@ func (c *PubSubClient) getAuthContext() context.Context {
 	)
 
 	return metadata.NewOutgoingContext(context.Background(), pairs)
-}
-
-// Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead.
-func getCerts() *x509.CertPool {
-	if certs, err := x509.SystemCertPool(); err == nil {
-		return certs
-	}
-
-	return x509.NewCertPool()
-}
-
-// parseUnionFields parses the schema JSON to identify avro union fields.
-func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}, error) {
-	var schema map[string]interface{}
-	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return nil, fmt.Errorf("failed to parse schema: %w", err)
-	}
-
-	unionFields := make(map[string]struct{})
-	fields := schema["fields"].([]interface{})
-	for _, field := range fields {
-		f := field.(map[string]interface{})
-		fieldType := f["type"]
-		if types, ok := fieldType.([]interface{}); ok && len(types) > 1 {
-			unionFields[f["name"].(string)] = struct{}{}
-		}
-	}
-	return unionFields, nil
-}
-
-// flattenUnionFields flattens union fields decoded from Avro.
-func flattenUnionFields(_ context.Context, data map[string]interface{}, unionFields map[string]struct{}) map[string]interface{} {
-	flatData := make(map[string]interface{})
-	for key, value := range data {
-		if _, ok := unionFields[key]; ok { // Check if this field is a union
-			if valueMap, ok := value.(map[string]interface{}); ok && len(valueMap) == 1 {
-				for _, actualValue := range valueMap {
-					flatData[key] = actualValue
-					break
-				}
-			} else {
-				flatData[key] = value
-			}
-		} else {
-			flatData[key] = value
-		}
-	}
-
-	return flatData
 }

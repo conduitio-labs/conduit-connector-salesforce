@@ -34,7 +34,7 @@ type client interface {
 	Wait(context.Context) error
 }
 
-var _ client = (*pubsub.PubSubClient)(nil)
+var _ client = (*pubsub.Client)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
