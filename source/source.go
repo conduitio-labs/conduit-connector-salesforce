@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -33,7 +34,7 @@ type client interface {
 	Wait(context.Context) error
 }
 
-var _ client = (*PubSubClient)(nil)
+var _ client = (*pubsub.PubSubClient)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
@@ -87,7 +88,7 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 		return fmt.Errorf("error parsing sdk position: %w", err)
 	}
 
-	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
+	client, err := pubsub.NewGRPCClient(ctx, s.config.Config, parsedPositions)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}

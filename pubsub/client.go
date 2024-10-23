@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package source
+package pubsub
 
 import (
 	"context"
@@ -27,6 +27,7 @@ import (
 	"time"
 
 	rt "github.com/avast/retry-go/v4"
+	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
 	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -89,7 +90,7 @@ type ConnectResponseEvent struct {
 }
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
-func NewGRPCClient(ctx context.Context, config Config, currentPos position.Topics) (*PubSubClient, error) {
+func NewGRPCClient(ctx context.Context, config config.Config, currentPos position.Topics) (*PubSubClient, error) {
 	sdk.Logger(ctx).Info().
 		Strs("topics", config.TopicNames).
 		Msgf("Starting GRPC client")
