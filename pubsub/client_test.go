@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package source
+package pubsub
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func TestPubSubClient_Initialize(t *testing.T) {
 		nil,
 	)
 
-	c := &PubSubClient{
+	c := &Client{
 		oauth:         mockAuth,
 		pubSubClient:  mockPubSubClient,
 		buffer:        make(chan ConnectResponseEvent),
