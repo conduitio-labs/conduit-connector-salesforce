@@ -2,12 +2,12 @@ package destination
 
 import (
 	"context"
-	"fmt"
 
 	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/pkg/errors"
 )
 
 var _ client = (*pubsub.Client)(nil)
@@ -42,12 +42,12 @@ func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
 		&c,
 		NewDestination().Parameters(),
 	); err != nil {
-		return fmt.Errorf("failed to parse config: %w", err)
+		return errors.Errorf("failed to parse config: %s", err)
 	}
 
 	c, err := c.Validate(ctx)
 	if err != nil {
-		return fmt.Errorf("config failed to validate: %w", err)
+		return errors.Errorf("config failed to validate: %s", err)
 	}
 
 	d.config = c
@@ -59,11 +59,11 @@ func (d *Destination) Open(ctx context.Context) error {
 
 	client, err := pubsub.NewGRPCClient(ctx, d.config.Config)
 	if err != nil {
-		return fmt.Errorf("could not create GRPCClient: %w", err)
+		return errors.Errorf("could not create GRPCClient: %s", err)
 	}
 
 	if err := client.Initialize(ctx, []string{d.config.TopicName}); err != nil {
-		return fmt.Errorf("could not initialize pubsub client: %w", err)
+		return errors.Errorf("could not initialize pubsub client: %s", err)
 	}
 
 	d.client = client
@@ -78,7 +78,7 @@ func (d *Destination) Open(ctx context.Context) error {
 
 func (d *Destination) Write(ctx context.Context, rr []opencdc.Record) (int, error) {
 	if err := d.client.Publish(ctx, rr); err != nil {
-		return 0, fmt.Errorf("failed to publish records : %w", err)
+		return 0, errors.Errorf("failed to publish records : %s", err)
 	}
 
 	return len(rr), nil
@@ -92,7 +92,7 @@ func (d *Destination) Teardown(ctx context.Context) error {
 	d.client.Stop(ctx)
 
 	if err := d.client.Close(ctx); err != nil {
-		return fmt.Errorf("error when closing subscriber conn: %w", err)
+		return errors.Errorf("error when closing subscriber conn: %s", err)
 	}
 
 	return nil

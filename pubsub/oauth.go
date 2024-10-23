@@ -17,11 +17,12 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 type Authenticator interface {
@@ -48,7 +49,7 @@ type LoginResponse struct {
 }
 
 func (l LoginResponse) Err() error {
-	return fmt.Errorf("%s: %s", l.Error, l.ErrorDescription)
+	return errors.Errorf("%s: %s", l.Error, l.ErrorDescription)
 }
 
 type UserInfoResponse struct {
@@ -59,7 +60,7 @@ type UserInfoResponse struct {
 }
 
 func (u UserInfoResponse) Err() error {
-	return fmt.Errorf("%s: %s", u.Error, u.ErrorDescription)
+	return errors.Errorf("%s: %s", u.Error, u.ErrorDescription)
 }
 
 type Credentials struct {
@@ -70,7 +71,7 @@ type Credentials struct {
 func NewCredentials(clientID, secret, endpoint string) (Credentials, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return Credentials{}, fmt.Errorf("failed to parse OAuth endpoint url: %w", err)
+		return Credentials{}, errors.Errorf("failed to parse oauth endpoint url: %s", err)
 	}
 
 	return Credentials{
@@ -80,11 +81,11 @@ func NewCredentials(clientID, secret, endpoint string) (Credentials, error) {
 	}, nil
 }
 
-type OAuth struct {
+type oauth struct {
 	Credentials
 }
 
-func (a OAuth) Login() (*LoginResponse, error) {
+func (a oauth) Login() (*LoginResponse, error) {
 	body := url.Values{}
 	body.Set("grant_type", "client_credentials")
 	body.Set("client_id", a.ClientID)
@@ -100,45 +101,45 @@ func (a OAuth) Login() (*LoginResponse, error) {
 		strings.NewReader(body.Encode()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make login req: %w", err)
+		return nil, errors.Errorf("failed to make login req: %s", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http OAuth request failed: %w", err)
+		return nil, errors.Errorf("http oauth request failed: %s", err)
 	}
 	defer httpResp.Body.Close()
 
 	var loginResp LoginResponse
 	if err := json.NewDecoder(httpResp.Body).Decode(&loginResp); err != nil {
-		return nil, fmt.Errorf("error decoding login response: %w", err)
+		return nil, errors.Errorf("error decoding login response: %s", err)
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(
-			"unexpected OAuth login (status: %d) response: %w", httpResp.StatusCode, loginResp.Err(),
+		return nil, errors.Errorf(
+			"unexpected oauth login (status: %d) response: %s", httpResp.StatusCode, loginResp.Err(),
 		)
 	}
 
 	return &loginResp, nil
 }
 
-func (a OAuth) UserInfo(accessToken string) (*UserInfoResponse, error) {
+func (a oauth) UserInfo(accessToken string) (*UserInfoResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), OAuthDialTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.userInfoURL(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make userinfo req: %w", err)
+		return nil, errors.Errorf("failed to make userinfo req: %s", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error getting user info response - %s", err)
+		return nil, errors.Errorf("error getting user info response - %s", err)
 	}
 
 	defer httpResp.Body.Close()
@@ -146,22 +147,22 @@ func (a OAuth) UserInfo(accessToken string) (*UserInfoResponse, error) {
 	var userInfoResp UserInfoResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&userInfoResp)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding user info - %s", err)
+		return nil, errors.Errorf("error decoding user info - %s", err)
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(
-			"unexpected OAuth userInfo (status: %d) response: %w", httpResp.StatusCode, userInfoResp.Err(),
+		return nil, errors.Errorf(
+			"unexpected oauth userInfo (status: %d) response: %s", httpResp.StatusCode, userInfoResp.Err(),
 		)
 	}
 
 	return &userInfoResp, nil
 }
 
-func (a OAuth) loginURL() string {
+func (a oauth) loginURL() string {
 	return a.OAuthEndpoint.JoinPath(loginEndpoint).String()
 }
 
-func (a OAuth) userInfoURL() string {
+func (a oauth) userInfoURL() string {
 	return a.OAuthEndpoint.JoinPath(userInfoEndpoint).String()
 }

@@ -17,10 +17,10 @@ package source
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"time"
 
 	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
+	"github.com/pkg/errors"
 
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/config"
@@ -62,12 +62,12 @@ func (s *Source) Configure(ctx context.Context, cfg config.Config) error {
 		&c,
 		NewSource().Parameters(),
 	); err != nil {
-		return fmt.Errorf("failed to parse config: %w", err)
+		return errors.Errorf("failed to parse config: %s", err)
 	}
 
 	c, err := c.Validate(ctx)
 	if err != nil {
-		return fmt.Errorf("config failed to validate: %w", err)
+		return errors.Errorf("config failed to validate: %s", err)
 	}
 
 	s.config = c
@@ -88,20 +88,20 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 
 	parsedPositions, err := position.ParseSDKPosition(sdkPos, s.config.TopicName)
 	if err != nil {
-		return fmt.Errorf("error parsing sdk position: %w", err)
+		return errors.Errorf("error parsing sdk position: %s", err)
 	}
 
 	client, err := pubsub.NewGRPCClient(ctx, s.config.Config)
 	if err != nil {
-		return fmt.Errorf("could not create GRPCClient: %w", err)
+		return errors.Errorf("could not create GRPCClient: %s", err)
 	}
 
 	if err := client.Initialize(ctx, s.config.TopicNames); err != nil {
-		return fmt.Errorf("could not initialize pubsub client: %w", err)
+		return errors.Errorf("could not initialize pubsub client: %s", err)
 	}
 
 	if err := client.StartCDC(ctx, s.config.ReplayPreset, parsedPositions, s.config.TopicNames, s.config.PollingPeriod); err != nil {
-		return fmt.Errorf("could not initialize pubsub client: %w", err)
+		return errors.Errorf("could not initialize pubsub client: %s", err)
 	}
 
 	s.client = client
@@ -127,7 +127,7 @@ func (s *Source) Read(ctx context.Context) (rec opencdc.Record, err error) {
 
 	r, err := s.client.Next(ctx)
 	if err != nil {
-		return opencdc.Record{}, fmt.Errorf("failed to get next record: %w", err)
+		return opencdc.Record{}, errors.Errorf("failed to get next record: %s", err)
 	}
 
 	// filter out empty record payloads
@@ -177,7 +177,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	}
 
 	if err := s.client.Close(ctx); err != nil {
-		return fmt.Errorf("error when closing subscriber conn: %w", err)
+		return errors.Errorf("error when closing subscriber conn: %s", err)
 	}
 
 	return nil

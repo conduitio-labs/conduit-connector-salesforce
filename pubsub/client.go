@@ -16,13 +16,12 @@ package pubsub
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 
 	rt "github.com/avast/retry-go/v4"
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
@@ -110,7 +109,7 @@ func NewGRPCClient(ctx context.Context, config config.Config) (*Client, error) {
 
 	conn, err := grpc.NewClient(config.PubsubAddress, dialOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("gRPC dial: %w", err)
+		return nil, errors.Errorf("gRPC dial: %s", err)
 	}
 
 	creds, err := NewCredentials(config.ClientID, config.ClientSecret, config.OAuthEndpoint)
@@ -125,7 +124,7 @@ func NewGRPCClient(ctx context.Context, config config.Config) (*Client, error) {
 		unionFields:  make(map[string]map[string]struct{}),
 		replayPreset: replayPreset,
 		buffer:       make(chan ConnectResponseEvent),
-		oauth:        &OAuth{Credentials: creds},
+		oauth:        &oauth{Credentials: creds},
 		maxRetries:   config.RetryCount,
 	}, nil
 }
@@ -191,11 +190,11 @@ func (c *Client) StartCDC(ctx context.Context, replay string, currentPos positio
 func (c *Client) Next(ctx context.Context) (opencdc.Record, error) {
 	select {
 	case <-ctx.Done():
-		return opencdc.Record{}, fmt.Errorf("next: context done: %w", ctx.Err())
+		return opencdc.Record{}, errors.Errorf("next: context done: %s", ctx.Err())
 	case event, ok := <-c.buffer:
 		if !ok {
 			if err := c.tomb.Err(); err != nil {
-				return opencdc.Record{}, fmt.Errorf("tomb exited: %w", err)
+				return opencdc.Record{}, errors.Errorf("tomb exited: %s", err)
 			}
 			return opencdc.Record{}, ErrEndOfRecords
 		}
@@ -256,12 +255,12 @@ func (c *Client) GetTopic(topic string) (*eventbusv1.TopicInfo, error) {
 
 	resp, err := c.pubSubClient.GetTopic(ctx, req, grpc.Trailer(&trailer))
 	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve topic %q: %w", topic, err)
+		return nil, errors.Errorf("failed to retrieve topic %q: %s", topic, err)
 	}
 	return resp, nil
 }
 
-// Wrapper function around the GetSchema RPC. This will add the OAuth credentials and make a call to fetch data about a specific schema.
+// Wrapper function around the GetSchema RPC. This will add the oauth credentials and make a call to fetch data about a specific schema.
 func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 	var trailer metadata.MD
 
@@ -280,7 +279,7 @@ func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 		Fields(trailer).
 		Msg("retrieved schema")
 	if err != nil {
-		return nil, fmt.Errorf("error getting schema from salesforce api - %s", err)
+		return nil, errors.Errorf("error getting schema from salesforce api - %s", err)
 	}
 
 	return resp, nil
@@ -291,7 +290,7 @@ func (c *Client) Publish(ctx context.Context, records []opencdc.Record) error {
 	// TODO - refactor the way we access the topic
 	topic, err := c.GetTopic(c.topicNames[0])
 	if err != nil {
-		return fmt.Errorf("error on publish, cannot retrieve topic %s : %s", c.topicNames[0], err)
+		return errors.Errorf("error on publish, cannot retrieve topic %s : %s", c.topicNames[0], err)
 	}
 
 	sdk.Logger(ctx).Info().
@@ -304,21 +303,18 @@ func (c *Client) Publish(ctx context.Context, records []opencdc.Record) error {
 	}
 
 	for _, r := range records {
-		data := r.Payload.After
-
-		var dataMap map[string]interface{}
-		if err := json.Unmarshal(data.Bytes(), &dataMap); err != nil {
-			return fmt.Errorf("error marshaling data: %s", err)
-		}
-
-		avroPrepared, err := validateAndPreparePayload(dataMap, codec.Schema())
+		data, err := extractPayload(r.Operation, r.Payload)
 		if err != nil {
-			return fmt.Errorf("error validating and preparing avro data:%s", err)
+			return errors.Errorf("failed to extract payload data: %s", err)
+		}
+		avroPrepared, err := validateAndPreparePayload(data, codec.Schema())
+		if err != nil {
+			return errors.Errorf("error validating and preparing avro data:%s", err)
 		}
 
 		avroEncoded, err := codec.BinaryFromNative(nil, avroPrepared)
 		if err != nil {
-			return fmt.Errorf("error encoding data to avro: %s", err)
+			return errors.Errorf("error encoding data to avro: %s", err)
 		}
 
 		event := eventbusv1.ProducerEvent{
@@ -340,7 +336,7 @@ func (c *Client) Publish(ctx context.Context, records []opencdc.Record) error {
 
 	resp, err := c.pubSubClient.Publish(c.getAuthContext(), &publishRequest)
 	if err != nil {
-		return fmt.Errorf("error on publishing event: %s", err)
+		return errors.Errorf("error on publishing event: %s", err)
 	}
 
 	sdk.Logger(ctx).Info().
@@ -352,7 +348,7 @@ func (c *Client) Publish(ctx context.Context, records []opencdc.Record) error {
 	return nil
 }
 
-// Wrapper function around the Subscribe RPC. This will add the OAuth credentials and create a separate streaming client that will be used to,
+// Wrapper function around the Subscribe RPC. This will add the oauth credentials and create a separate streaming client that will be used to,
 // fetch data from the topic. This method will continuously consume messages unless an error occurs; if an error does occur then this method will,
 // return the last successfully consumed replayID as well as the error message. If no messages were successfully consumed then this method will return,
 // the same replayID that it originally received as a parameter.
@@ -370,7 +366,7 @@ func (c *Client) Subscribe(
 			Str("topic", topic).
 			Str("replayID", string(replayID)).
 			Msg("failed to subscribe to topic")
-		return nil, fmt.Errorf("failed to subscribe to topic %q: %w", topic, err)
+		return nil, errors.Errorf("failed to subscribe to topic %q: %s", topic, err)
 	}
 
 	sdk.Logger(ctx).Debug().
@@ -392,10 +388,10 @@ func (c *Client) Subscribe(
 
 	if err := subscribeClient.Send(initialFetchRequest); err != nil {
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("received EOF on initial fetch: %w", err)
+			return nil, errors.Errorf("received EOF on initial fetch: %s", err)
 		}
 
-		return nil, fmt.Errorf("initial fetch request failed: %w", err)
+		return nil, errors.Errorf("initial fetch request failed: %s", err)
 	}
 
 	sdk.Logger(ctx).Debug().
@@ -428,7 +424,7 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 
 	subClient, err := c.Subscribe(ctx, preset, replayID, topic)
 	if err != nil {
-		return nil, fmt.Errorf("error subscribing to topic on custom replay id %q: %w",
+		return nil, errors.Errorf("error subscribing to topic on custom replay id %q: %s",
 			base64.StdEncoding.EncodeToString(replayID),
 			err,
 		)
@@ -451,7 +447,7 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 		logger.Error().Fields(subClient.Trailer()).Msg("recv error")
 
 		if errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("pubsub: stream closed when receiving events: %w", err)
+			return nil, errors.Errorf("pubsub: stream closed when receiving events: %s", err)
 		}
 		if connErr(err) {
 			logger.Warn().
@@ -500,7 +496,7 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 
 		payload, ok := parsed.(map[string]interface{})
 		if !ok {
-			return events, fmt.Errorf("invalid payload type %T", payload)
+			return events, errors.Errorf("invalid payload type %T", payload)
 		}
 
 		logger.Trace().Fields(payload).Msg("decoded event")
@@ -533,7 +529,7 @@ func (c *Client) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec
 
 	schema, err := c.GetSchema(schemaID)
 	if err != nil {
-		return nil, fmt.Errorf("error making getschema request for uncached schema - %s", err)
+		return nil, errors.Errorf("error making getschema request for uncached schema - %s", err)
 	}
 
 	schemaJSON := schema.GetSchemaJson()
@@ -542,14 +538,14 @@ func (c *Client) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec
 
 	codec, err = goavro.NewCodec(schemaJSON)
 	if err != nil {
-		return nil, fmt.Errorf("error creating codec from uncached schema - %s", err)
+		return nil, errors.Errorf("error creating codec from uncached schema - %s", err)
 	}
 
 	c.codecCache[schemaID] = codec
 
 	unionFields, err := parseUnionFields(ctx, schemaJSON)
 	if err != nil {
-		return nil, fmt.Errorf("error parsing union fields from schema: %w", err)
+		return nil, errors.Errorf("error parsing union fields from schema: %s", err)
 	}
 
 	c.unionFields[schemaID] = unionFields
@@ -580,19 +576,19 @@ func (c *Client) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, 
 	topic.retryCount--
 
 	if err = c.login(ctx); err != nil && topic.retryCount <= 0 {
-		return retry, topic, fmt.Errorf("failed to refresh auth: %w", err)
+		return retry, topic, errors.Errorf("failed to refresh auth: %s", err)
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on login for topic %s - retry - %d : %v ", topic.topicName, topic.retryCount, err)
 		retry = true
-		return retry, topic, fmt.Errorf("received error on subscribe for topic %s - retry - %d : %w", topic.topicName, topic.retryCount, err)
+		return retry, topic, errors.Errorf("received error on subscribe for topic %s - retry - %d : %s", topic.topicName, topic.retryCount, err)
 	}
 
 	if err := c.canAccessTopic(ctx, subscribe); err != nil && topic.retryCount <= 0 {
-		return retry, topic, fmt.Errorf("failed to subscribe to client topic %s: %w", topic.topicName, err)
+		return retry, topic, errors.Errorf("failed to subscribe to client topic %s: %s", topic.topicName, err)
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on subscribe for topic %s - retry - %d : %v", topic.topicName, topic.retryCount, err)
 		retry = true
-		return retry, topic, fmt.Errorf("received error on subscribe for topic %s - retry - %d : %w ", topic.topicName, topic.retryCount, err)
+		return retry, topic, errors.Errorf("received error on subscribe for topic %s - retry - %d : %s ", topic.topicName, topic.retryCount, err)
 	}
 
 	retry = false
@@ -632,7 +628,7 @@ func (c *Client) startCDC(ctx context.Context, topic Topic) error {
 				rt.Attempts(topic.retryCount),
 			)
 			if err != nil {
-				return fmt.Errorf("error retrying (number of retries %d) for topic %s auth - %s", topic.retryCount, topic.topicName, err)
+				return errors.Errorf("error retrying (number of retries %d) for topic %s auth - %s", topic.retryCount, topic.topicName, err)
 			}
 			// once we are done with retries, reset the count
 			topic.retryCount = c.maxRetries
@@ -670,7 +666,7 @@ func (c *Client) startCDC(ctx context.Context, topic Topic) error {
 					break
 				}
 
-				return fmt.Errorf("error recv events: %w", err)
+				return errors.Errorf("error recv events: %s", err)
 			}
 
 			if len(events) == 0 {
@@ -701,7 +697,7 @@ func (c *Client) buildRecord(event ConnectResponseEvent) (opencdc.Record, error)
 	// TODO - ADD something here to distinguish creates, deletes, updates.
 	err := c.currentPos.SetTopicReplayID(event.Topic, event.ReplayID)
 	if err != nil {
-		return opencdc.Record{}, fmt.Errorf("err setting replay id %s on an event for topic %s : %w", event.ReplayID, event.Topic, err)
+		return opencdc.Record{}, errors.Errorf("err setting replay id %s on an event for topic %s : %s", event.ReplayID, event.Topic, err)
 	}
 
 	sdk.Logger(context.Background()).Debug().
@@ -753,22 +749,22 @@ func (c *Client) login(ctx context.Context) error {
 	return nil
 }
 
-// Wrapper function around the GetTopic RPC. This will add the OAuth credentials and make a call to fetch data about a specific topic.
+// Wrapper function around the GetTopic RPC. This will add the oauth credentials and make a call to fetch data about a specific topic.
 func (c *Client) canAccessTopic(ctx context.Context, accessLevel string) error {
 	logger := sdk.Logger(ctx).With().Str("at", "client.canAccessTopic").Logger()
 
 	for _, topic := range c.topicNames {
 		resp, err := c.GetTopic(topic)
 		if err != nil {
-			return fmt.Errorf(" error retrieving info on topic %s : %s ", topic, err)
+			return errors.Errorf(" error retrieving info on topic %s : %s ", topic, err)
 		}
 
 		if accessLevel == subscribe && !resp.CanSubscribe {
-			return fmt.Errorf("user %q not allowed to subscribe to %q", c.userID, resp.TopicName)
+			return errors.Errorf("user %q not allowed to subscribe to %q", c.userID, resp.TopicName)
 		}
 
 		if accessLevel == publish && !resp.CanPublish {
-			return fmt.Errorf("user %q not allowed to publish to %q", c.userID, resp.TopicName)
+			return errors.Errorf("user %q not allowed to publish to %q", c.userID, resp.TopicName)
 		}
 
 		logger.Debug().

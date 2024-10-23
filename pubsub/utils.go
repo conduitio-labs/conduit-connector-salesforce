@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
 	"strings"
+
+	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/pkg/errors"
 )
 
 // Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead.
@@ -21,7 +23,7 @@ func getCerts() *x509.CertPool {
 func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}, error) {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return nil, fmt.Errorf("failed to parse schema: %w", err)
+		return nil, errors.Errorf("failed to parse schema: %s", err)
 	}
 
 	unionFields := make(map[string]struct{})
@@ -68,7 +70,7 @@ func invalidReplayIDErr(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "replay id validation failed")
 }
 
-func validateAndPreparePayload(dataMap map[string]interface{}, avroSchema string) (map[string]interface{}, error) {
+func validateAndPreparePayload(dataMap opencdc.StructuredData, avroSchema string) (map[string]interface{}, error) {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(avroSchema), &schema); err != nil {
 		return nil, err
@@ -101,4 +103,29 @@ func validateAndPreparePayload(dataMap map[string]interface{}, avroSchema string
 	}
 
 	return avroRecord, nil
+}
+
+func extractPayload(op opencdc.Operation, payload opencdc.Change) (opencdc.StructuredData, error) {
+	var sdkData opencdc.Data
+	if op == opencdc.OperationDelete {
+		sdkData = payload.Before
+	} else {
+		sdkData = payload.After
+	}
+
+	dataStruct, okStruct := sdkData.(opencdc.StructuredData)
+	dataRaw, okRaw := sdkData.(opencdc.RawData)
+
+	if okStruct {
+		return dataStruct, nil
+	} else if okRaw {
+		data := make(opencdc.StructuredData)
+		if err := json.Unmarshal(dataRaw, &payload); err != nil {
+			return nil, errors.Errorf("cannot unmarshal raw data payload into structured (%T): %s", sdkData, err)
+		}
+
+		return data, nil
+	}
+
+	return nil, errors.Errorf("cannot find data in payload (%T)", sdkData)
 }
