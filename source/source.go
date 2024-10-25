@@ -86,7 +86,7 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 		Strs("topics", s.config.TopicNames).
 		Msg("Open Source Connector")
 
-	parsedPositions, err := position.ParseSDKPosition(sdkPos, s.config.TopicName)
+	parsedPositions, err := position.ParseSDKPosition(sdkPos, "")
 	if err != nil {
 		return errors.Errorf("error parsing sdk position: %s", err)
 	}
