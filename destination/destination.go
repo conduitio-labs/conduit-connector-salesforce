@@ -30,7 +30,7 @@ var _ client = (*pubsub.Client)(nil)
 type client interface {
 	Stop(context.Context)
 	Close(context.Context) error
-	Write(context.Context, []*eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent) error
+	Write(context.Context, *eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent) error
 	Initialize(context.Context, []string) error
 	PrepareEvents(context.Context, []opencdc.Record) ([]*eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent, error)
 }
@@ -90,8 +90,10 @@ func (d *Destination) Write(ctx context.Context, rr []opencdc.Record) (int, erro
 		return 0, errors.Errorf("failed to prepare records : %w", err)
 	}
 
-	if err := d.client.Write(ctx, events, mappedEvents); err != nil {
-		return 0, errors.Errorf("failed to write records : %w", err)
+	for i, event := range events {
+		if err := d.client.Write(ctx, event, mappedEvents); err != nil {
+			return i, errors.Errorf("failed to write records: %w", err)
+		}
 	}
 
 	return len(rr), nil

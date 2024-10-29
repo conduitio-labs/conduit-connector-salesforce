@@ -85,7 +85,7 @@ type Topic struct {
 }
 
 type PublishEvent struct {
-	events       []*eventbusv1.ProducerEvent
+	event        *eventbusv1.ProducerEvent
 	mapppedEvent map[string]*eventbusv1.ProducerEvent
 	topic        Topic
 }
@@ -358,8 +358,12 @@ func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([
 }
 
 // TODO - refactor this to allow for multi topic support.
-func (c *Client) Write(ctx context.Context, events []*eventbusv1.ProducerEvent, mappedEvents map[string]*eventbusv1.ProducerEvent) error {
-	var retry bool
+// Write attempts to publish event with retry, if event is returned we want to retry it.
+func (c *Client) Write(ctx context.Context, event *eventbusv1.ProducerEvent, mappedEvents map[string]*eventbusv1.ProducerEvent) error {
+	var (
+		retry bool
+		err   error
+	)
 
 	topic := Topic{
 		topicName:  c.topicNames[0],
@@ -371,14 +375,14 @@ func (c *Client) Write(ctx context.Context, events []*eventbusv1.ProducerEvent, 
 		Str("replayID", string(c.currentPos.TopicReplayID(topic.topicName))).
 		Msg("starting write.")
 
-	err := rt.Do(func() error {
-		events, err := c.Publish(ctx, &PublishEvent{
-			events:       events,
+	err = rt.Do(func() error {
+		event, err = c.Publish(ctx, &PublishEvent{
+			event:        event,
 			mapppedEvent: mappedEvents,
 			topic:        topic,
 		})
 
-		if events != nil && topic.retryCount > 0 {
+		if event != nil && topic.retryCount > 0 {
 			_, topic, err = c.retryAuth(ctx, true, topic)
 			if err != nil {
 				sdk.Logger(ctx).Error().
@@ -388,7 +392,7 @@ func (c *Client) Write(ctx context.Context, events []*eventbusv1.ProducerEvent, 
 			}
 			sdk.Logger(ctx).Info().
 				Str("topic", topic.topicName).
-				Msgf("retrying pubsub publish, number of events to retry %d: %s", len(events), err)
+				Msgf("retrying pubsub publish, event %s: %s", event.GetId(), err)
 			retry = true
 			return err
 		}
@@ -412,41 +416,35 @@ func (c *Client) Write(ctx context.Context, events []*eventbusv1.ProducerEvent, 
 	return nil
 }
 
-// If any of the events error out on publish, we send them through the write function to retry
-// If after n number of retries the batch doesnt have all events successfully published, we error.
-func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) ([]*eventbusv1.ProducerEvent, error) {
+// If an event errors out, we send it to the write function to retry
+// If after n number of retries, we error.
+func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) (*eventbusv1.ProducerEvent, error) {
 	publishRequest := eventbusv1.PublishRequest{
 		TopicName: publishEvent.topic.topicName,
-		Events:    publishEvent.events,
+		Events:    []*eventbusv1.ProducerEvent{publishEvent.event},
 	}
 
 	resp, err := c.pubSubClient.Publish(c.getAuthContext(), &publishRequest)
 	if err != nil {
-		return publishEvent.events, errors.Errorf("error on publishing events: %w", err)
+		return publishEvent.event, errors.Errorf("error on publishing events: %w", err)
 	}
 
-	var failedEvents []*eventbusv1.ProducerEvent
 	for _, eventRes := range resp.GetResults() {
 		if eventRes.GetError() != nil {
 			if eventRetry, ok := publishEvent.mapppedEvent[eventRes.GetCorrelationKey()]; ok {
-				failedEvents = append(failedEvents, eventRetry)
+				sdk.Logger(ctx).Debug().
+					Str("event key", eventRes.GetCorrelationKey()).
+					Str("event", eventRes.String()).
+					Str("topic_name", publishEvent.topic.topicName).
+					Int("number of replays", int(publishEvent.topic.retryCount)). //nolint:gosec //no need to lint retry
+					Msgf("failed to publish event: %s", eventRes.GetError())
+
+				if publishEvent.topic.retryCount > 0 {
+					return eventRetry, errors.Errorf("failed to publish events %s, retry publish", publishEvent.event.GetId())
+				}
 			}
 
-			sdk.Logger(ctx).Debug().
-				Str("event key", eventRes.GetCorrelationKey()).
-				Str("event", eventRes.String()).
-				Str("topic_name", publishEvent.topic.topicName).
-				Int("number of replays", int(publishEvent.topic.retryCount)). //nolint:gosec //no need to lint retry
-
-				Msgf("failed to publish event: %s", eventRes.GetError())
 		}
-	}
-
-	if len(failedEvents) > 0 {
-		if publishEvent.topic.retryCount > 0 {
-			return failedEvents, errors.Errorf("failed to publish %d events, retry publish", len(failedEvents))
-		}
-		return nil, errors.Errorf("failed to publish %d events for topic %s", len(failedEvents), publishEvent.topic.topicName)
 	}
 
 	sdk.Logger(ctx).Info().
