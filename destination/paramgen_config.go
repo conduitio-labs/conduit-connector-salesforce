@@ -65,7 +65,9 @@ func (Config) Parameters() map[string]config.Parameter {
 			Default:     "",
 			Description: "Topic is Salesforce event or topic to write record",
 			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
+			Validations: []config.Validation{
+				config.ValidationRequired{},
+			},
 		},
 	}
 }

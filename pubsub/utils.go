@@ -21,7 +21,7 @@ import (
 	"strings"
 
 	"github.com/conduitio/conduit-commons/opencdc"
-	"github.com/pkg/errors"
+	"github.com/go-errors/errors"
 )
 
 // Fetches system certs and returns them if possible. If unable to fetch system certs then an empty cert pool is returned instead.
@@ -42,12 +42,12 @@ func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}
 	)
 
 	if err := json.Unmarshal([]byte(schemaJSON), &schema); err != nil {
-		return nil, errors.Errorf("failed to parse schema: %s", err)
+		return nil, errors.Errorf("failed to parse schema: %w", err)
 	}
 
 	unionFields := make(map[string]struct{})
 	if fields, ok = schema["fields"].([]interface{}); !ok {
-		return nil, fmt.Errorf("failed to parse fields from topic schema")
+		return nil, errors.Errorf("failed to parse fields from topic schema")
 	}
 	for _, field := range fields {
 		f := field.(map[string]interface{})
@@ -142,7 +142,7 @@ func extractPayload(op opencdc.Operation, payload opencdc.Change) (opencdc.Struc
 	} else if okRaw {
 		data := make(opencdc.StructuredData)
 		if err := json.Unmarshal(dataRaw, &payload); err != nil {
-			return nil, errors.Errorf("cannot unmarshal raw data payload into structured (%T): %s", sdkData, err)
+			return nil, errors.Errorf("cannot unmarshal raw data payload into structured (%T): %w", sdkData, err)
 		}
 
 		return data, nil

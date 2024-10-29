@@ -30,7 +30,7 @@ import (
 type Config struct {
 	config.Config
 
-	// TopicName {WARN will be deprecated soon} the TopicName the source connector will subscribe to
+	// Deprecated: use `topicNames` instead.
 	TopicName string `json:"topicName"`
 
 	// TopicNames are the TopicNames the source connector will subscribe to

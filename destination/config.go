@@ -15,10 +15,6 @@
 package destination
 
 import (
-	"context"
-	"errors"
-	"fmt"
-
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 )
@@ -30,19 +26,5 @@ type Config struct {
 	config.Config
 
 	// Topic is Salesforce event or topic to write record
-	TopicName string `json:"topicName"`
-}
-
-func (c Config) Validate(_ context.Context) (Config, error) {
-	var errs []error
-
-	if len(c.TopicName) == 0 {
-		errs = append(errs, fmt.Errorf("'topicNames' empty, need at least one topic"))
-	}
-
-	if len(errs) != 0 {
-		return c, errors.Join(errs...)
-	}
-
-	return c, nil
+	TopicName string `json:"topicName" validate:"required"`
 }

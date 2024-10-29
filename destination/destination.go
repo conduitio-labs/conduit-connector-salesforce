@@ -3,11 +3,12 @@ package destination
 import (
 	"context"
 
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
 	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/pkg/errors"
+	"github.com/go-errors/errors"
 )
 
 var _ client = (*pubsub.Client)(nil)
@@ -15,8 +16,9 @@ var _ client = (*pubsub.Client)(nil)
 type client interface {
 	Stop(context.Context)
 	Close(context.Context) error
+	Write(context.Context, []*eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent) error
 	Initialize(context.Context, []string) error
-	Publish(context.Context, []opencdc.Record) error
+	PrepareEvents(context.Context, []opencdc.Record) ([]*eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent, error)
 }
 
 type Destination struct {
@@ -34,36 +36,28 @@ func (d *Destination) Parameters() config.Parameters {
 }
 
 func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
-	var c Config
-
 	if err := sdk.Util.ParseConfig(
 		ctx,
 		cfg,
-		&c,
+		&d.config,
 		NewDestination().Parameters(),
 	); err != nil {
-		return errors.Errorf("failed to parse config: %s", err)
+		return errors.Errorf("failed to parse config: %w", err)
 	}
 
-	c, err := c.Validate(ctx)
-	if err != nil {
-		return errors.Errorf("config failed to validate: %s", err)
-	}
-
-	d.config = c
 	return nil
 }
 
 func (d *Destination) Open(ctx context.Context) error {
 	logger := sdk.Logger(ctx)
 
-	client, err := pubsub.NewGRPCClient(ctx, d.config.Config)
+	client, err := pubsub.NewGRPCClient(ctx, d.config.Config, "publish")
 	if err != nil {
-		return errors.Errorf("could not create GRPCClient: %s", err)
+		return errors.Errorf("could not create GRPCClient: %w", err)
 	}
 
 	if err := client.Initialize(ctx, []string{d.config.TopicName}); err != nil {
-		return errors.Errorf("could not initialize pubsub client: %s", err)
+		return errors.Errorf("could not initialize pubsub client: %w", err)
 	}
 
 	d.client = client
@@ -77,8 +71,13 @@ func (d *Destination) Open(ctx context.Context) error {
 }
 
 func (d *Destination) Write(ctx context.Context, rr []opencdc.Record) (int, error) {
-	if err := d.client.Publish(ctx, rr); err != nil {
-		return 0, errors.Errorf("failed to publish records : %s", err)
+	events, mappedEvents, err := d.client.PrepareEvents(ctx, rr)
+	if err != nil {
+		return 0, errors.Errorf("failed to prepare records : %w", err)
+	}
+
+	if err := d.client.Write(ctx, events, mappedEvents); err != nil {
+		return 0, errors.Errorf("failed to write records : %w", err)
 	}
 
 	return len(rr), nil
@@ -92,7 +91,7 @@ func (d *Destination) Teardown(ctx context.Context) error {
 	d.client.Stop(ctx)
 
 	if err := d.client.Close(ctx); err != nil {
-		return errors.Errorf("error when closing subscriber conn: %s", err)
+		return errors.Errorf("error when closing subscriber conn: %w", err)
 	}
 
 	return nil
