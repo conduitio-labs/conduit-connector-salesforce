@@ -307,22 +307,55 @@ func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 }
 
 func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([]*eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent, error) {
-	var events []*eventbusv1.ProducerEvent
+	var (
+		events    []*eventbusv1.ProducerEvent
+		codec     *goavro.Codec
+		err       error
+		topicInfo *eventbusv1.TopicInfo
+		retry     bool
+	)
+
+	topic := Topic{
+		topicName:  c.topicNames[0],
+		retryCount: c.maxRetries,
+	}
+
 	mappedEvents := make(map[string]*eventbusv1.ProducerEvent)
-	// TODO - refactor the way we access the topic
-	topic, err := c.GetTopic(c.topicNames[0])
-	if err != nil {
-		return nil, nil, errors.Errorf("error on publish, cannot retrieve topic %s : %w", c.topicNames[0], err)
-	}
 
-	sdk.Logger(ctx).Info().
-		Str("topic", topic.TopicName).
-		Msg("Started publishing event")
+	err = rt.Do(func() error {
+		// TODO - refactor the way we access the topic
+		if retry {
+			retry, topic, err = c.retryAuth(ctx, retry, topic)
+			if err != nil {
+				return errors.Errorf("unable to auth : %w", err)
+			}
+		}
+		topicInfo, err = c.GetTopic(topic.topicName)
+		if err != nil {
+			return errors.Errorf("error on publish, cannot retrieve topic %s : %w", c.topicNames[0], err)
+		}
 
-	codec, err := c.fetchCodec(ctx, topic.SchemaId)
-	if err != nil {
-		return nil, nil, errors.Errorf("error fetchiing codec for topic %s: %w", topic.TopicName, err)
-	}
+		sdk.Logger(ctx).Info().
+			Str("topic", topicInfo.TopicName).
+			Msg("Started publishing event")
+
+		codec, err = c.fetchCodec(ctx, topicInfo.SchemaId)
+		if err != nil {
+			return errors.Errorf("error fetchiing codec for topic %s: %w", topicInfo.TopicName, err)
+		}
+
+		return err
+	},
+		rt.Delay(RetryDelay),
+		rt.Attempts(c.maxRetries),
+		rt.OnRetry(func(n uint, err error) {
+			if !retry {
+				fmt.Println("Stopping retry on write")
+				return
+			}
+			fmt.Printf("Retrying... Attempt #%d due to: %s\n", n+1, err)
+		}),
+	)
 
 	for _, r := range records {
 		recordID := uuid.New()
@@ -341,7 +374,7 @@ func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([
 		}
 
 		event := eventbusv1.ProducerEvent{
-			SchemaId: topic.SchemaId,
+			SchemaId: topicInfo.SchemaId,
 			Payload:  avroEncoded,
 			Id:       recordID.String(),
 		}
@@ -350,7 +383,7 @@ func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([
 	}
 
 	sdk.Logger(ctx).Info().
-		Str("topic", topic.TopicName).
+		Str("topic", topicInfo.TopicName).
 		Int("number of events", len(events)).
 		Msg("Events created, attempting to publish")
 
@@ -443,7 +476,6 @@ func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) (*even
 					return eventRetry, errors.Errorf("failed to publish events %s, retry publish", publishEvent.event.GetId())
 				}
 			}
-
 		}
 	}
 
