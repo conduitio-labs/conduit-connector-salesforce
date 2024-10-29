@@ -49,7 +49,7 @@ type LoginResponse struct {
 }
 
 func (l LoginResponse) Err() error {
-	return errors.Errorf("%s: %w", l.Error, l.ErrorDescription)
+	return errors.Errorf("%s: %s", l.Error, l.ErrorDescription)
 }
 
 type UserInfoResponse struct {
@@ -60,7 +60,7 @@ type UserInfoResponse struct {
 }
 
 func (u UserInfoResponse) Err() error {
-	return errors.Errorf("%s: %w", u.Error, u.ErrorDescription)
+	return errors.Errorf("%s: %s", u.Error, u.ErrorDescription)
 }
 
 type Credentials struct {

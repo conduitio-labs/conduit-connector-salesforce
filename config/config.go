@@ -42,7 +42,7 @@ type Config struct {
 	RetryCount uint `json:"retryCount" default:"10"`
 }
 
-func (c Config) Validate(ctx context.Context) (Config, error) {
+func (c Config) Validate(_ context.Context) (Config, error) {
 	if _, err := url.Parse(c.OAuthEndpoint); err != nil {
 		return c, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
 	}

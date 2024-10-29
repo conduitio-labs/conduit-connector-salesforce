@@ -4,13 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//	http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package pubsub
 
 import (
@@ -356,7 +357,7 @@ func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([
 	return events, mappedEvents, nil
 }
 
-// TODO - refactor this to allow for multi topic support
+// TODO - refactor this to allow for multi topic support.
 func (c *Client) Write(ctx context.Context, events []*eventbusv1.ProducerEvent, mappedEvents map[string]*eventbusv1.ProducerEvent) error {
 	var retry bool
 
@@ -412,7 +413,7 @@ func (c *Client) Write(ctx context.Context, events []*eventbusv1.ProducerEvent, 
 }
 
 // If any of the events error out on publish, we send them through the write function to retry
-// If after n number of retries the batch doesnt have all events successfully published, we error
+// If after n number of retries the batch doesnt have all events successfully published, we error.
 func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) ([]*eventbusv1.ProducerEvent, error) {
 	publishRequest := eventbusv1.PublishRequest{
 		TopicName: publishEvent.topic.topicName,
@@ -435,7 +436,8 @@ func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) ([]*ev
 				Str("event key", eventRes.GetCorrelationKey()).
 				Str("event", eventRes.String()).
 				Str("topic_name", publishEvent.topic.topicName).
-				Int("number of replays", int(publishEvent.topic.retryCount)).
+				Int("number of replays", int(publishEvent.topic.retryCount)). //nolint:gosec //no need to lint retry
+
 				Msgf("failed to publish event: %s", eventRes.GetError())
 		}
 	}
