@@ -17,7 +17,6 @@ package pubsub
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -85,9 +84,8 @@ type Topic struct {
 }
 
 type PublishEvent struct {
-	event        *eventbusv1.ProducerEvent
-	mapppedEvent map[string]*eventbusv1.ProducerEvent
-	topic        Topic
+	event *eventbusv1.ProducerEvent
+	topic Topic
 }
 
 type ConnectResponseEvent struct {
@@ -306,9 +304,10 @@ func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 	return resp, nil
 }
 
-func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([]*eventbusv1.ProducerEvent, map[string]*eventbusv1.ProducerEvent, error) {
+// TODO - refactor this to allow for multi topic support.
+// Write attempts to publish event with retry for any pubsub connection errors.
+func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 	var (
-		events    []*eventbusv1.ProducerEvent
 		codec     *goavro.Codec
 		err       error
 		topicInfo *eventbusv1.TopicInfo
@@ -320,16 +319,13 @@ func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([
 		retryCount: c.maxRetries,
 	}
 
-	mappedEvents := make(map[string]*eventbusv1.ProducerEvent)
+	sdk.Logger(ctx).Info().
+		Str("topic", topic.topicName).
+		Str("replayID", string(c.currentPos.TopicReplayID(topic.topicName))).
+		Msg("Starting write.")
 
 	err = rt.Do(func() error {
-		// TODO - refactor the way we access the topic
-		if retry {
-			retry, topic, err = c.retryAuth(ctx, retry, topic)
-			if err != nil {
-				return errors.Errorf("unable to auth : %w", err)
-			}
-		}
+		recordID := uuid.New()
 		topicInfo, err = c.GetTopic(topic.topicName)
 		if err != nil {
 			return errors.Errorf("error on publish, cannot retrieve topic %s : %w", c.topicNames[0], err)
@@ -341,151 +337,110 @@ func (c *Client) PrepareEvents(ctx context.Context, records []opencdc.Record) ([
 
 		codec, err = c.fetchCodec(ctx, topicInfo.SchemaId)
 		if err != nil {
+			retry = false
 			return errors.Errorf("error fetchiing codec for topic %s: %w", topicInfo.TopicName, err)
 		}
 
-		return err
-	},
-		rt.Delay(RetryDelay),
-		rt.Attempts(c.maxRetries),
-		rt.OnRetry(func(n uint, err error) {
-			if !retry {
-				fmt.Println("Stopping retry on write")
-				return
-			}
-			fmt.Printf("Retrying... Attempt #%d due to: %s\n", n+1, err)
-		}),
-	)
-
-	for _, r := range records {
-		recordID := uuid.New()
-		data, err := extractPayload(r.Operation, r.Payload)
+		avroEncoded, err := c.prepareRecord(codec, r)
 		if err != nil {
-			return nil, nil, errors.Errorf("failed to extract payload data: %w", err)
-		}
-		avroPrepared, err := validateAndPreparePayload(data, codec.Schema())
-		if err != nil {
-			return nil, nil, errors.Errorf("error validating and preparing avro data:%w", err)
+			retry = false
+			return errors.Errorf("error preparing event payload: %w", err)
 		}
 
-		avroEncoded, err := codec.BinaryFromNative(nil, avroPrepared)
-		if err != nil {
-			return nil, nil, errors.Errorf("error encoding data to avro: %w", err)
-		}
-
-		event := eventbusv1.ProducerEvent{
+		event := &eventbusv1.ProducerEvent{
 			SchemaId: topicInfo.SchemaId,
 			Payload:  avroEncoded,
 			Id:       recordID.String(),
 		}
-		events = append(events, &event)
-		mappedEvents[recordID.String()] = &event
-	}
 
-	sdk.Logger(ctx).Info().
-		Str("topic", topicInfo.TopicName).
-		Int("number of events", len(events)).
-		Msg("Events created, attempting to publish")
-
-	return events, mappedEvents, nil
-}
-
-// TODO - refactor this to allow for multi topic support.
-// Write attempts to publish event with retry, if event is returned we want to retry it.
-func (c *Client) Write(ctx context.Context, event *eventbusv1.ProducerEvent, mappedEvents map[string]*eventbusv1.ProducerEvent) error {
-	var (
-		retry bool
-		err   error
-	)
-
-	topic := Topic{
-		topicName:  c.topicNames[0],
-		retryCount: c.maxRetries,
-	}
-
-	sdk.Logger(ctx).Info().
-		Str("topic", topic.topicName).
-		Str("replayID", string(c.currentPos.TopicReplayID(topic.topicName))).
-		Msg("starting write.")
-
-	err = rt.Do(func() error {
-		event, err = c.Publish(ctx, &PublishEvent{
-			event:        event,
-			mapppedEvent: mappedEvents,
-			topic:        topic,
+		err = c.Publish(ctx, &PublishEvent{
+			event: event,
+			topic: topic,
 		})
-
-		if event != nil && topic.retryCount > 0 {
-			_, topic, err = c.retryAuth(ctx, true, topic)
-			if err != nil {
-				sdk.Logger(ctx).Error().
-					Str("topic", topic.topicName).
-					Msgf("failed to re-auth to destination: %s", err)
-				retry = false
-			}
-			sdk.Logger(ctx).Info().
-				Str("topic", topic.topicName).
-				Msgf("retrying pubsub publish, event %s: %s", event.GetId(), err)
-			retry = true
-			return err
-		}
 
 		return err
 	},
 		rt.Delay(RetryDelay),
 		rt.Attempts(topic.retryCount),
-		rt.OnRetry(func(n uint, err error) {
-			if !retry {
-				fmt.Println("Stopping retry on write")
-				return
+		rt.RetryIf(func(err error) bool {
+			if !retry || topic.retryCount > 0 {
+				return false
 			}
-			fmt.Printf("Retrying... Attempt #%d due to: %s\n", n+1, err)
+
+			sdk.Logger(ctx).Info().
+				Str("topic", topic.topicName).
+				Msgf("retrying pubsub publish, record %s: %s", r.Key, err)
+
+			retry, topic, err = c.retryAuth(ctx, retry, topic)
+			if err != nil {
+				sdk.Logger(ctx).Error().
+					Str("topic", topic.topicName).
+					Msgf("failed to re-auth to destination: %s", err)
+				return false
+			}
+			return true
 		}),
 	)
 	if err != nil {
 		return errors.Errorf("failed to publish events on topic %s : %w", topic.topicName, err)
 	}
 
-	return nil
+	return err
 }
 
-// If an event errors out, we send it to the write function to retry
-// If after n number of retries, we error.
-func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) (*eventbusv1.ProducerEvent, error) {
+func (c *Client) prepareRecord(codec *goavro.Codec, r opencdc.Record) ([]byte, error) {
+	data, err := extractPayload(r.Operation, r.Payload)
+	if err != nil {
+		return nil, errors.Errorf("failed to extract payload data: %w", err)
+	}
+	avroPrepared, err := validateAndPreparePayload(data, codec.Schema())
+	if err != nil {
+		return nil, errors.Errorf("error validating and preparing avro data:%w", err)
+	}
+
+	avroEncoded, err := codec.BinaryFromNative(nil, avroPrepared)
+	if err != nil {
+		return nil, errors.Errorf("error encoding data to avro: %w", err)
+	}
+	return avroEncoded, nil
+}
+
+func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) error {
 	publishRequest := eventbusv1.PublishRequest{
 		TopicName: publishEvent.topic.topicName,
 		Events:    []*eventbusv1.ProducerEvent{publishEvent.event},
 	}
 
+	sdk.Logger(ctx).Info().
+		Str("topic", publishEvent.topic.topicName).
+		Str("event id", publishEvent.event.GetId()).
+		Msg("Publishing event.")
+
 	resp, err := c.pubSubClient.Publish(c.getAuthContext(), &publishRequest)
 	if err != nil {
-		return publishEvent.event, errors.Errorf("error on publishing events: %w", err)
+		return errors.Errorf("error on publishing events: %w", err)
 	}
 
+	// check result status on event
 	for _, eventRes := range resp.GetResults() {
 		if eventRes.GetError() != nil {
-			if eventRetry, ok := publishEvent.mapppedEvent[eventRes.GetCorrelationKey()]; ok {
-				sdk.Logger(ctx).Debug().
-					Str("event key", eventRes.GetCorrelationKey()).
-					Str("event", eventRes.String()).
-					Str("topic_name", publishEvent.topic.topicName).
-					Int("number of replays", int(publishEvent.topic.retryCount)). //nolint:gosec //no need to lint retry
-					Msgf("failed to publish event: %s", eventRes.GetError())
-
-				if publishEvent.topic.retryCount > 0 {
-					return eventRetry, errors.Errorf("failed to publish events %s, retry publish", publishEvent.event.GetId())
-				}
-			}
+			sdk.Logger(ctx).Debug().
+				Str("event key", eventRes.GetCorrelationKey()).
+				Str("event", eventRes.String()).
+				Str("topic_name", publishEvent.topic.topicName).
+				Int("number of replays", int(publishEvent.topic.retryCount)). //nolint:gosec //no need to lint retry
+				Msgf("failed to publish event: %s", eventRes.GetError())
+			return errors.Errorf("failed to publish events %s, retry publish: %s", publishEvent.event.GetId(), eventRes.GetError().GetMsg())
 		}
 	}
 
 	sdk.Logger(ctx).Info().
 		Str("topic", publishEvent.topic.topicName).
 		Str("resp", resp.String()).
-		Str("resp rpc id", resp.RpcId).
-		Msg("Events published")
+		Str("resp rpc id", resp.GetRpcId()).
+		Msg("Event published")
 
-	return nil, nil
+	return nil
 }
 
 // Wrapper function around the Subscribe RPC. This will add the oauth credentials and create a separate streaming client that will be used to,
