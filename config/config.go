@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"time"
 )
 
 //go:generate paramgen -output=paramgen_config.go Config
@@ -40,6 +41,18 @@ type Config struct {
 
 	// Number of retries allowed per read before the connector errors out
 	RetryCount uint `json:"retryCount" default:"10"`
+
+	// Deprecated: use `topicNames` instead.
+	TopicName string `json:"topicName"`
+
+	// TopicNames are the TopicNames the source connector will subscribe to
+	TopicNames []string `json:"topicNames"`
+
+	// PollingPeriod is the client event polling interval
+	PollingPeriod time.Duration `json:"pollingPeriod" default:"100ms"`
+
+	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
+	ReplayPreset string `json:"replayPreset" default:"earliest" validate:"inclusion=latest|earliest"`
 }
 
 func (c Config) Validate(_ context.Context) (Config, error) {
@@ -52,8 +65,6 @@ func (c Config) Validate(_ context.Context) (Config, error) {
 	}
 
 	if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {
-		fmt.Println("address")
-		fmt.Println(c.PubsubAddress)
 		return c, fmt.Errorf("failed to parse pubsub address: %w", err)
 	}
 

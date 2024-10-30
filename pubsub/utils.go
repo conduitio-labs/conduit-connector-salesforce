@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,10 @@ func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}
 		return nil, errors.Errorf("failed to parse fields from topic schema")
 	}
 	for _, field := range fields {
-		f := field.(map[string]interface{})
+		f, ok := field.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("failed to extract field map from schema")
+		}
 		fieldType := f["type"]
 		if types, ok := fieldType.([]interface{}); ok && len(types) > 1 {
 			unionFields[f["name"].(string)] = struct{}{}
