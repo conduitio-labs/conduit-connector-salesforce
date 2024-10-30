@@ -40,7 +40,7 @@ type Config struct {
 	PollingPeriod time.Duration `json:"pollingPeriod" default:"100ms"`
 
 	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
-	ReplayPreset string `json:"replayPreset" default:"earliest"`
+	ReplayPreset string `json:"replayPreset" default:"earliest" validate:"inclusion=latest|earliest"`
 }
 
 func (c Config) Validate(ctx context.Context) (Config, error) {

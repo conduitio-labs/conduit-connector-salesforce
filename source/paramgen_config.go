@@ -68,7 +68,9 @@ func (Config) Parameters() map[string]config.Parameter {
 			Default:     "earliest",
 			Description: "Replay preset for the position the connector is fetching events from, can be latest or default to earliest.",
 			Type:        config.ParameterTypeString,
-			Validations: []config.Validation{},
+			Validations: []config.Validation{
+				config.ValidationInclusion{List: []string{"latest", "earliest"}},
+			},
 		},
 		ConfigRetryCount: {
 			Default:     "10",
@@ -78,7 +80,7 @@ func (Config) Parameters() map[string]config.Parameter {
 		},
 		ConfigTopicName: {
 			Default:     "",
-			Description: "TopicName {WARN will be deprecated soon} the TopicName the source connector will subscribe to",
+			Description: "Deprecated: use `topicNames` instead.",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
