@@ -12,8 +12,12 @@ const (
 	ConfigClientSecret       = "clientSecret"
 	ConfigInsecureSkipVerify = "insecureSkipVerify"
 	ConfigOauthEndpoint      = "oauthEndpoint"
+	ConfigPollingPeriod      = "pollingPeriod"
 	ConfigPubsubAddress      = "pubsubAddress"
+	ConfigReplayPreset       = "replayPreset"
 	ConfigRetryCount         = "retryCount"
+	ConfigTopicName          = "topicName"
+	ConfigTopicNames         = "topicNames"
 )
 
 func (Config) Parameters() map[string]config.Parameter {
@@ -48,16 +52,42 @@ func (Config) Parameters() map[string]config.Parameter {
 				config.ValidationRequired{},
 			},
 		},
+		ConfigPollingPeriod: {
+			Default:     "100ms",
+			Description: "PollingPeriod is the client event polling interval",
+			Type:        config.ParameterTypeDuration,
+			Validations: []config.Validation{},
+		},
 		ConfigPubsubAddress: {
 			Default:     "api.pubsub.salesforce.com:7443",
 			Description: "gRPC Pubsub Salesforce API address",
 			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
+		ConfigReplayPreset: {
+			Default:     "earliest",
+			Description: "Replay preset for the position the connector is fetching events from, can be latest or default to earliest.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{
+				config.ValidationInclusion{List: []string{"latest", "earliest"}},
+			},
+		},
 		ConfigRetryCount: {
 			Default:     "10",
 			Description: "Number of retries allowed per read before the connector errors out",
 			Type:        config.ParameterTypeInt,
+			Validations: []config.Validation{},
+		},
+		ConfigTopicName: {
+			Default:     "",
+			Description: "Deprecated: use `topicNames` instead.",
+			Type:        config.ParameterTypeString,
+			Validations: []config.Validation{},
+		},
+		ConfigTopicNames: {
+			Default:     "",
+			Description: "TopicNames are the TopicNames the source connector will subscribe to",
+			Type:        config.ParameterTypeString,
 			Validations: []config.Validation{},
 		},
 	}

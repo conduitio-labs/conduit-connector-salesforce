@@ -52,7 +52,7 @@ func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}
 	for _, field := range fields {
 		f, ok := field.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("failed to extract field map from schema")
+			return nil, errors.Errorf("failed to extract field map from schema")
 		}
 		fieldType := f["type"]
 		if types, ok := fieldType.([]interface{}); ok && len(types) > 1 {
@@ -101,11 +101,21 @@ func validateAndPreparePayload(dataMap opencdc.StructuredData, avroSchema string
 	}
 
 	avroRecord := make(map[string]interface{})
-	fields := schema["fields"].([]interface{})
+	fields, ok := schema["fields"].([]interface{})
+	if !ok {
+		return nil, errors.Errorf("failed to parse fields from schema")
+	}
 
 	for _, field := range fields {
-		fieldMap := field.(map[string]interface{})
-		fieldName := fieldMap["name"].(string)
+		fieldMap, ok := field.(map[string]interface{})
+		if !ok {
+			return nil, errors.Errorf("failed to parse field map from schema fields")
+		}
+
+		fieldName, ok := fieldMap["name"].(string)
+		if !ok {
+			return nil, errors.Errorf("failed to parse name from field map")
+		}
 		fieldType := fieldMap["type"]
 		value, exists := dataMap[fieldName]
 		if !exists {

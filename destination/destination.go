@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,8 +61,6 @@ func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
 }
 
 func (d *Destination) Open(ctx context.Context) error {
-	logger := sdk.Logger(ctx)
-
 	client, err := pubsub.NewGRPCClient(ctx, d.config.Config, "publish")
 	if err != nil {
 		return errors.Errorf("could not create GRPCClient: %w", err)
@@ -74,7 +72,7 @@ func (d *Destination) Open(ctx context.Context) error {
 
 	d.client = client
 
-	logger.Debug().
+	sdk.Logger(ctx).Debug().
 		Str("at", "destination.open").
 		Str("topic", d.config.TopicName).
 		Msgf("Grpc Client has been set. Will begin read for topic: %s", d.config.TopicName)
