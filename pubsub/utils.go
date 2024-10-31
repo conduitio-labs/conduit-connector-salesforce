@@ -54,7 +54,11 @@ func parseUnionFields(_ context.Context, schemaJSON string) (map[string]struct{}
 		}
 		fieldType := f["type"]
 		if types, ok := fieldType.([]interface{}); ok && len(types) > 1 {
-			unionFields[f["name"].(string)] = struct{}{}
+			fieldName, ok := f["name"].(string)
+			if !ok {
+				return nil, fmt.Errorf("failed to extract field name from map")
+			}
+			unionFields[fieldName] = struct{}{}
 		}
 	}
 	return unionFields, nil
