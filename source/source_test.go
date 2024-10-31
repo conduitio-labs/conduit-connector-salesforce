@@ -54,6 +54,10 @@ func Test_Read(t *testing.T) {
 		TopicNames: []string{"/events/TestEvent__e", "/events/TestEvent2__e"},
 	}
 
+	testConfig := Config{
+		Config: config,
+	}
+
 	testCases := []struct {
 		desc           string
 		config         Config
