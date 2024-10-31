@@ -11,12 +11,11 @@ linters-settings:
     min-complexity: 20
   goconst:
     ignore-tests: true
-  # TODO: Skip this until ready to merge.
-  # goheader:
-  #  template-path: '.golangci.goheader.template'
-  #  values:
-  #    regexp:
-  #      copyright-year: 20[2-9]\d
+  goheader:
+   template-path: '.golangci.goheader.template'
+   values:
+     regexp:
+       copyright-year: 20[2-9]\d
 
 linters:
   # please, do not use `enable-all`: it's deprecated and will be removed soon.

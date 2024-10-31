@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/conduitio/conduit-commons/opencdc"
+	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
+	opencdc "github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -42,12 +43,15 @@ func Test_Read(t *testing.T) {
 			},
 		},
 	}
-
-	testConfig := Config{
+	config := config.Config{
 		ClientID:      "test-client-id",
 		ClientSecret:  "test-client-secret",
 		OAuthEndpoint: "https://somewhere",
 		TopicNames:    []string{"/events/TestEvent__e", "/events/TestEvent2__e"},
+	}
+
+	testConfig := Config{
+		Config: config,
 	}
 
 	testCases := []struct {

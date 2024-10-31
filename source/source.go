@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -33,7 +34,7 @@ type client interface {
 	Wait(context.Context) error
 }
 
-var _ client = (*PubSubClient)(nil)
+var _ client = (*pubsub.Client)(nil)
 
 type Source struct {
 	sdk.UnimplementedSource
@@ -82,12 +83,12 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 		Strs("topics", s.config.TopicNames).
 		Msg("Open Source Connector")
 
-	parsedPositions, err := position.ParseSDKPosition(sdkPos, s.config.TopicName)
+	parsedPositions, err := position.ParseSDKPosition(sdkPos, "")
 	if err != nil {
 		return fmt.Errorf("error parsing sdk position: %w", err)
 	}
 
-	client, err := NewGRPCClient(ctx, s.config, parsedPositions)
+	client, err := pubsub.NewGRPCClient(ctx, s.config.Config, parsedPositions)
 	if err != nil {
 		return fmt.Errorf("could not create GRPCClient: %w", err)
 	}

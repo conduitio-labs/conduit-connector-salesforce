@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc. and Miquido
+// Copyright © 2024 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package source
+package pubsub
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func TestPubSubClient_Initialize(t *testing.T) {
 		nil,
 	)
 
-	c := &PubSubClient{
+	c := &Client{
 		oauth:         mockAuth,
 		pubSubClient:  mockPubSubClient,
 		buffer:        make(chan ConnectResponseEvent),
