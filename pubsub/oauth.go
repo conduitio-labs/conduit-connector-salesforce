@@ -17,14 +17,15 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/go-errors/errors"
 )
 
-type authenticator interface {
+type Authenticator interface {
 	Login() (*LoginResponse, error)
 	UserInfo(string) (*UserInfoResponse, error)
 }
@@ -48,7 +49,7 @@ type LoginResponse struct {
 }
 
 func (l LoginResponse) Err() error {
-	return fmt.Errorf("%s: %s", l.Error, l.ErrorDescription)
+	return errors.Errorf("%s: %s", l.Error, l.ErrorDescription)
 }
 
 type UserInfoResponse struct {
@@ -59,7 +60,7 @@ type UserInfoResponse struct {
 }
 
 func (u UserInfoResponse) Err() error {
-	return fmt.Errorf("%s: %s", u.Error, u.ErrorDescription)
+	return errors.Errorf("%s: %s", u.Error, u.ErrorDescription)
 }
 
 type Credentials struct {
@@ -70,7 +71,7 @@ type Credentials struct {
 func NewCredentials(clientID, secret, endpoint string) (Credentials, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return Credentials{}, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
+		return Credentials{}, errors.Errorf("failed to parse oauth endpoint url: %w", err)
 	}
 
 	return Credentials{
@@ -100,24 +101,24 @@ func (a oauth) Login() (*LoginResponse, error) {
 		strings.NewReader(body.Encode()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make login req: %w", err)
+		return nil, errors.Errorf("failed to make login req: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("http oauth request failed: %w", err)
+		return nil, errors.Errorf("http oauth request failed: %w", err)
 	}
 	defer httpResp.Body.Close()
 
 	var loginResp LoginResponse
 	if err := json.NewDecoder(httpResp.Body).Decode(&loginResp); err != nil {
-		return nil, fmt.Errorf("error decoding login response: %w", err)
+		return nil, errors.Errorf("error decoding login response: %w", err)
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(
+		return nil, errors.Errorf(
 			"unexpected oauth login (status: %d) response: %w", httpResp.StatusCode, loginResp.Err(),
 		)
 	}
@@ -131,14 +132,14 @@ func (a oauth) UserInfo(accessToken string) (*UserInfoResponse, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.userInfoURL(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make userinfo req: %w", err)
+		return nil, errors.Errorf("failed to make userinfo req: %w", err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	httpResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("error getting user info response - %s", err)
+		return nil, errors.Errorf("error getting user info response - %w", err)
 	}
 
 	defer httpResp.Body.Close()
@@ -146,11 +147,11 @@ func (a oauth) UserInfo(accessToken string) (*UserInfoResponse, error) {
 	var userInfoResp UserInfoResponse
 	err = json.NewDecoder(httpResp.Body).Decode(&userInfoResp)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding user info - %s", err)
+		return nil, errors.Errorf("error decoding user info - %w", err)
 	}
 
 	if httpResp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf(
+		return nil, errors.Errorf(
 			"unexpected oauth userInfo (status: %d) response: %w", httpResp.StatusCode, userInfoResp.Err(),
 		)
 	}

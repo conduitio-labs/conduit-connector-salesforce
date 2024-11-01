@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package destination
 
 import (
-	sf "github.com/conduitio-labs/conduit-connector-salesforce"
-	"github.com/conduitio-labs/conduit-connector-salesforce/destination"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source"
-
-	sdk "github.com/conduitio/conduit-connector-sdk"
+	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
+	"github.com/conduitio/conduit-commons/opencdc"
 )
 
-func main() {
-	sdk.Serve(sdk.Connector{
-		NewSpecification: sf.Specification,
-		NewSource:        source.NewSource,
-		NewDestination:   destination.NewDestination,
-	})
+type TopicFn func(opencdc.Record) (string, error)
+
+//go:generate paramgen -output=paramgen_config.go Config
+type Config struct {
+	config.Config
+
+	// Topic is Salesforce event or topic to write record
+	TopicName string `json:"topicName" validate:"required"`
 }

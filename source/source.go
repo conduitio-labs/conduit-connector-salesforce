@@ -17,9 +17,11 @@ package source
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
+	"time"
 
-	"github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
+	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
+	"github.com/go-errors/errors"
+
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
@@ -28,7 +30,8 @@ import (
 
 type client interface {
 	Next(context.Context) (opencdc.Record, error)
-	Initialize(context.Context) error
+	Initialize(context.Context, []string) error
+	StartCDC(context.Context, string, position.Topics, []string, time.Duration) error
 	Stop(context.Context)
 	Close(context.Context) error
 	Wait(context.Context) error
@@ -51,23 +54,14 @@ func (s *Source) Parameters() config.Parameters {
 }
 
 func (s *Source) Configure(ctx context.Context, cfg config.Config) error {
-	var c Config
-
 	if err := sdk.Util.ParseConfig(
 		ctx,
 		cfg,
-		&c,
+		&s.config,
 		NewSource().Parameters(),
 	); err != nil {
-		return fmt.Errorf("failed to parse config: %w", err)
+		return errors.Errorf("failed to parse config: %w", err)
 	}
-
-	c, err := c.Validate(ctx)
-	if err != nil {
-		return fmt.Errorf("config failed to validate: %w", err)
-	}
-
-	s.config = c
 
 	return nil
 }
@@ -85,16 +79,20 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 
 	parsedPositions, err := position.ParseSDKPosition(sdkPos, "")
 	if err != nil {
-		return fmt.Errorf("error parsing sdk position: %w", err)
+		return errors.Errorf("error parsing sdk position: %w", err)
 	}
 
-	client, err := pubsub.NewGRPCClient(ctx, s.config.Config, parsedPositions)
+	client, err := pubsub.NewGRPCClient(ctx, s.config.Config, "subscribe")
 	if err != nil {
-		return fmt.Errorf("could not create GRPCClient: %w", err)
+		return errors.Errorf("could not create GRPCClient: %w", err)
 	}
 
-	if err := client.Initialize(ctx); err != nil {
-		return fmt.Errorf("could not initialize pubsub client: %w", err)
+	if err := client.Initialize(ctx, s.config.TopicNames); err != nil {
+		return errors.Errorf("could not initialize pubsub client: %w", err)
+	}
+
+	if err := client.StartCDC(ctx, s.config.ReplayPreset, parsedPositions, s.config.TopicNames, s.config.PollingPeriod); err != nil {
+		return errors.Errorf("could not initialize pubsub client: %w", err)
 	}
 
 	s.client = client
@@ -120,7 +118,7 @@ func (s *Source) Read(ctx context.Context) (rec opencdc.Record, err error) {
 
 	r, err := s.client.Next(ctx)
 	if err != nil {
-		return opencdc.Record{}, fmt.Errorf("failed to get next record: %w", err)
+		return opencdc.Record{}, errors.Errorf("failed to get next record: %w", err)
 	}
 
 	// filter out empty record payloads
@@ -170,7 +168,7 @@ func (s *Source) Teardown(ctx context.Context) error {
 	}
 
 	if err := s.client.Close(ctx); err != nil {
-		return fmt.Errorf("error when closing subscriber conn: %w", err)
+		return errors.Errorf("error when closing subscriber conn: %w", err)
 	}
 
 	return nil

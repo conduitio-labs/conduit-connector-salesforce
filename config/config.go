@@ -16,14 +16,9 @@ package config
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"slices"
-	"time"
-
-	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 //go:generate paramgen -output=paramgen_config.go Config
@@ -45,44 +40,15 @@ type Config struct {
 
 	// Number of retries allowed per read before the connector errors out
 	RetryCount uint `json:"retryCount" default:"10"`
-
-	// Deprecated: use `topicNames` instead.
-	TopicName string `json:"topicName"`
-
-	// TopicNames are the TopicNames the source connector will subscribe to
-	TopicNames []string `json:"topicNames"`
-
-	// PollingPeriod is the client event polling interval
-	PollingPeriod time.Duration `json:"pollingPeriod" default:"100ms"`
-
-	// Replay preset for the position the connector is fetching events from, can be latest or default to earliest.
-	ReplayPreset string `json:"replayPreset" default:"earliest" validate:"inclusion=latest|earliest"`
 }
 
-func (c Config) Validate(ctx context.Context) (Config, error) {
-	var errs []error
-
-	if c.TopicName != "" {
-		sdk.Logger(ctx).Warn().
-			Msg(`"topicName" is deprecated, use "topicNames" instead.`)
-
-		c.TopicNames = slices.Compact(append(c.TopicNames, c.TopicName))
-	}
-
-	if len(c.TopicNames) == 0 {
-		errs = append(errs, fmt.Errorf("'topicNames' empty, need at least one topic"))
-	}
-
-	if c.PollingPeriod == 0 {
-		errs = append(errs, fmt.Errorf("polling period cannot be zero %d", c.PollingPeriod))
-	}
-
-	if len(errs) != 0 {
-		return c, errors.Join(errs...)
-	}
-
+func (c Config) Validate(_ context.Context) (Config, error) {
 	if _, err := url.Parse(c.OAuthEndpoint); err != nil {
 		return c, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
+	}
+
+	if c.PubsubAddress == "" {
+		return c, fmt.Errorf("invalid pubsub address %q", c.PubsubAddress)
 	}
 
 	if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {

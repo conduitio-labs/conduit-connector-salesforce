@@ -5,6 +5,7 @@ go 1.23.2
 require (
 	github.com/conduitio/conduit-commons v0.4.0
 	github.com/conduitio/conduit-connector-sdk v0.11.0
+	github.com/go-errors/errors v1.5.1
 	github.com/golangci/golangci-lint v1.61.0
 	github.com/linkedin/goavro/v2 v2.13.0
 	github.com/stretchr/testify v1.9.0
@@ -101,7 +102,7 @@ require (
 	github.com/golangci/revgrep v0.5.3 // indirect
 	github.com/golangci/unconvert v0.0.0-20240309020433-c5143eacb3ed // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
+	github.com/google/uuid v1.6.0
 	github.com/gordonklaus/ineffassign v0.1.0 // indirect
 	github.com/gostaticanalysis/analysisutil v0.7.1 // indirect
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
