@@ -3,7 +3,6 @@
 ## General
 
 The Salesforce plugin is one of [Conduit](https://github.com/ConduitIO/conduit) plugins.
-It currently provides only source Salesforce connector, allowing for receiving Salesforce changes events in a Conduit pipeline.
 
 ## How to build it
 
@@ -15,7 +14,7 @@ The Source connector subscribes to Salesforce platform events and queries publis
 
 ## Destination
 
-The Destination connector subscribes to Salesforce platform events and publishes incoming records to the event in real time.
+The Destination connector publishes incoming records to Salesforce platform events in real time.
 
 ### How it works
 
@@ -101,8 +100,9 @@ While the connector is operational, it may be necessary to reconnect. The server
 
 With the above set up followed, you can begin configuring the source or destination connector. Refer to the table below on which values to set. 
 
-#### Source
+Additionally, on the destination connector, verify that the source record’s data fields align with those of the event it’s being published to. You can include or exclude fields from the data as necessary using Conduit Processors.
 
+#### Source
 
 | name              | description                                                                                                                                                                                                                                    | required | default |
 |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|---------|
