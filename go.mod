@@ -9,7 +9,7 @@ require (
 	github.com/golangci/golangci-lint v1.61.0
 	github.com/linkedin/goavro/v2 v2.13.0
 	github.com/stretchr/testify v1.9.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.1
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
