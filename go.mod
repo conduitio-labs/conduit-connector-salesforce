@@ -4,12 +4,12 @@ go 1.23.2
 
 require (
 	github.com/conduitio/conduit-commons v0.4.0
-	github.com/conduitio/conduit-connector-sdk v0.11.0
+	github.com/conduitio/conduit-connector-sdk v0.11.1
 	github.com/go-errors/errors v1.5.1
 	github.com/golangci/golangci-lint v1.61.0
 	github.com/linkedin/goavro/v2 v2.13.0
 	github.com/stretchr/testify v1.9.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.1
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
@@ -26,7 +26,7 @@ require (
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/twmb/go-cache v1.2.1 // indirect
-	go.uber.org/mock v0.4.0 // indirect
+	go.uber.org/mock v0.5.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
 )
 
