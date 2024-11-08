@@ -3,7 +3,7 @@ module github.com/conduitio-labs/conduit-connector-salesforce
 go 1.23.2
 
 require (
-	github.com/conduitio/conduit-commons v0.4.0
+	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-sdk v0.11.0
 	github.com/go-errors/errors v1.5.1
 	github.com/golangci/golangci-lint v1.61.0
@@ -145,7 +145,6 @@ require (
 	github.com/mgechev/revive v1.5.0 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moricho/tparallel v0.3.2 // indirect
