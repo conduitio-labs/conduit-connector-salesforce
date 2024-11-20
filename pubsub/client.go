@@ -393,7 +393,7 @@ func (c *Client) prepareRecord(codec *goavro.Codec, r opencdc.Record) ([]byte, e
 	if err != nil {
 		return nil, errors.Errorf("failed to extract payload data: %w", err)
 	}
-	avroPrepared, err := validateAndPreparePayload(data, codec.Schema())
+	avroPrepared, err := validateAndPreparePayload(data, codec.Schema(), c.userID)
 	if err != nil {
 		return nil, errors.Errorf("error validating and preparing avro data:%w", err)
 	}
