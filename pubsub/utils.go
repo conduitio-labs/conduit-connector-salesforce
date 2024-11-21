@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
 	"github.com/go-errors/errors"
@@ -98,7 +99,7 @@ func invalidReplayIDErr(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "replay id validation failed")
 }
 
-func validateAndPreparePayload(dataMap opencdc.StructuredData, avroSchema string) (map[string]interface{}, error) {
+func validateAndPreparePayload(dataMap opencdc.StructuredData, avroSchema string, userID string) (map[string]interface{}, error) {
 	var schema map[string]interface{}
 	if err := json.Unmarshal([]byte(avroSchema), &schema); err != nil {
 		return nil, err
@@ -138,6 +139,14 @@ func validateAndPreparePayload(dataMap opencdc.StructuredData, avroSchema string
 		default:
 			avroRecord[fieldName] = value
 		}
+	}
+
+	if val, ok := avroRecord["CreatedDate"]; !ok || val == nil {
+		avroRecord["CreatedDate"] = time.Now().Unix()
+	}
+
+	if val, ok := avroRecord["CreatedById"]; !ok || val == nil {
+		avroRecord["CreatedById"] = userID
 	}
 
 	return avroRecord, nil
