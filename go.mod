@@ -6,7 +6,7 @@ require (
 	github.com/conduitio/conduit-commons v0.5.0
 	github.com/conduitio/conduit-connector-sdk v0.12.0
 	github.com/go-errors/errors v1.5.1
-	github.com/golangci/golangci-lint v1.63.3
+	github.com/golangci/golangci-lint v1.63.4
 	github.com/linkedin/goavro/v2 v2.13.0
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.69.2
