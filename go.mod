@@ -10,7 +10,7 @@ require (
 	github.com/linkedin/goavro/v2 v2.13.1
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.3
+	google.golang.org/protobuf v1.36.4
 	gopkg.in/tomb.v2 v2.0.0-20161208151619-d5d1b5820637
 )
 
