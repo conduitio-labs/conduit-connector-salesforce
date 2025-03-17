@@ -26,8 +26,9 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-//go:generate paramgen -output=paramgen_config.go Config
 type Config struct {
+	sdk.DefaultSourceMiddleware
+
 	config.Config
 
 	// Deprecated: use `topicNames` instead.
@@ -43,7 +44,7 @@ type Config struct {
 	ReplayPreset string `json:"replayPreset" default:"earliest" validate:"inclusion=latest|earliest"`
 }
 
-func (c Config) Validate(ctx context.Context) (Config, error) {
+func (c *Config) Validate(ctx context.Context) error {
 	var errs []error
 
 	if c.TopicName != "" {
@@ -61,9 +62,5 @@ func (c Config) Validate(ctx context.Context) (Config, error) {
 		errs = append(errs, fmt.Errorf("polling period cannot be zero %d", c.PollingPeriod))
 	}
 
-	if len(errs) != 0 {
-		return c, errors.Join(errs...)
-	}
-
-	return c, nil
+	return errors.Join(errs...)
 }

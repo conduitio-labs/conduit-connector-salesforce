@@ -24,7 +24,7 @@ func (_m *mockPubSub_SubscribeClient) EXPECT() *mockPubSub_SubscribeClient_Expec
 	return &mockPubSub_SubscribeClient_Expecter{mock: &_m.Mock}
 }
 
-// CloseSend provides a mock function with given fields:
+// CloseSend provides a mock function with no fields
 func (_m *mockPubSub_SubscribeClient) CloseSend() error {
 	ret := _m.Called()
 
@@ -69,7 +69,7 @@ func (_c *mockPubSub_SubscribeClient_CloseSend_Call) RunAndReturn(run func() err
 	return _c
 }
 
-// Context provides a mock function with given fields:
+// Context provides a mock function with no fields
 func (_m *mockPubSub_SubscribeClient) Context() context.Context {
 	ret := _m.Called()
 
@@ -116,7 +116,7 @@ func (_c *mockPubSub_SubscribeClient_Context_Call) RunAndReturn(run func() conte
 	return _c
 }
 
-// Header provides a mock function with given fields:
+// Header provides a mock function with no fields
 func (_m *mockPubSub_SubscribeClient) Header() (metadata.MD, error) {
 	ret := _m.Called()
 
@@ -173,7 +173,7 @@ func (_c *mockPubSub_SubscribeClient_Header_Call) RunAndReturn(run func() (metad
 	return _c
 }
 
-// Recv provides a mock function with given fields:
+// Recv provides a mock function with no fields
 func (_m *mockPubSub_SubscribeClient) Recv() (*eventbusv1.FetchResponse, error) {
 	ret := _m.Called()
 
@@ -368,7 +368,7 @@ func (_c *mockPubSub_SubscribeClient_SendMsg_Call) RunAndReturn(run func(interfa
 	return _c
 }
 
-// Trailer provides a mock function with given fields:
+// Trailer provides a mock function with no fields
 func (_m *mockPubSub_SubscribeClient) Trailer() metadata.MD {
 	ret := _m.Called()
 

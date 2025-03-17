@@ -21,7 +21,6 @@ import (
 	"net/url"
 )
 
-//go:generate paramgen -output=paramgen_config.go Config
 type Config struct {
 	// ClientID is the client id from the salesforce app
 	ClientID string `json:"clientID" validate:"required"`
@@ -42,18 +41,18 @@ type Config struct {
 	RetryCount uint `json:"retryCount" default:"10"`
 }
 
-func (c Config) Validate(_ context.Context) (Config, error) {
+func (c *Config) Validate(_ context.Context) error {
 	if _, err := url.Parse(c.OAuthEndpoint); err != nil {
-		return c, fmt.Errorf("failed to parse oauth endpoint url: %w", err)
+		return fmt.Errorf("failed to parse oauth endpoint url: %w", err)
 	}
 
 	if c.PubsubAddress == "" {
-		return c, fmt.Errorf("invalid pubsub address %q", c.PubsubAddress)
+		return fmt.Errorf("invalid pubsub address %q", c.PubsubAddress)
 	}
 
 	if _, _, err := net.SplitHostPort(c.PubsubAddress); err != nil {
-		return c, fmt.Errorf("failed to parse pubsub address: %w", err)
+		return fmt.Errorf("failed to parse pubsub address: %w", err)
 	}
 
-	return c, nil
+	return nil
 }
