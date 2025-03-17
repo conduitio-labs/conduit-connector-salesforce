@@ -21,6 +21,7 @@ proto:
 generate:
 	go generate ./...
 	mockery
+	conn-sdk-cli readmegen -w
 
 
 .PHONY: install-tools

@@ -12,22 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate conn-sdk-cli specgen
+
 package salesforce
 
 import (
+	_ "embed"
+
+	"github.com/conduitio-labs/conduit-connector-salesforce/destination"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
-// version is set during the build process (i.e. the Makefile).
-// Default version matches default from runtime/debug.
+//go:embed connector.yaml
+var specs string
+
 var version = "(devel)"
 
-func Specification() sdk.Specification {
-	return sdk.Specification{
-		Name:        "salesforce",
-		Summary:     "A Salesforce source plugin for Conduit.",
-		Description: "The Conduit plugin supporting Salesforce source.",
-		Version:     version,
-		Author:      "Miquido & Meroxa, Inc.",
-	}
+var Connector = sdk.Connector{
+	NewSpecification: sdk.YAMLSpecification(specs, version),
+	NewSource:        source.NewSource,
+	NewDestination:   destination.NewDestination,
 }

@@ -15,17 +15,10 @@
 package main
 
 import (
-	sf "github.com/conduitio-labs/conduit-connector-salesforce"
-	"github.com/conduitio-labs/conduit-connector-salesforce/destination"
-	"github.com/conduitio-labs/conduit-connector-salesforce/source"
-
+	salesforce "github.com/conduitio-labs/conduit-connector-salesforce"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 func main() {
-	sdk.Serve(sdk.Connector{
-		NewSpecification: sf.Specification,
-		NewSource:        source.NewSource,
-		NewDestination:   destination.NewDestination,
-	})
+	sdk.Serve(salesforce.Connector)
 }

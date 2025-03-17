@@ -15,16 +15,24 @@
 package destination
 
 import (
+	"context"
+
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
 	"github.com/conduitio/conduit-commons/opencdc"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 type TopicFn func(opencdc.Record) (string, error)
 
-//go:generate paramgen -output=paramgen_config.go Config
 type Config struct {
+	sdk.DefaultDestinationMiddleware
+
 	config.Config
 
 	// Topic is Salesforce event or topic to write record
 	TopicName string `json:"topicName" validate:"required"`
+}
+
+func (c *Config) Validate(ctx context.Context) error {
+	return c.Config.Validate(ctx)
 }

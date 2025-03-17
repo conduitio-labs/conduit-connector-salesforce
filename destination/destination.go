@@ -18,7 +18,6 @@ import (
 	"context"
 
 	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
-	"github.com/conduitio/conduit-commons/config"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
@@ -35,29 +34,17 @@ type client interface {
 
 type Destination struct {
 	sdk.UnimplementedDestination
+
 	client client
 	config Config
 }
 
+func (d *Destination) Config() sdk.DestinationConfig {
+	return &d.config
+}
+
 func NewDestination() sdk.Destination {
-	return sdk.DestinationWithMiddleware(&Destination{}, sdk.DefaultDestinationMiddleware()...)
-}
-
-func (d *Destination) Parameters() config.Parameters {
-	return d.config.Parameters()
-}
-
-func (d *Destination) Configure(ctx context.Context, cfg config.Config) error {
-	if err := sdk.Util.ParseConfig(
-		ctx,
-		cfg,
-		&d.config,
-		NewDestination().Parameters(),
-	); err != nil {
-		return errors.Errorf("failed to parse config: %w", err)
-	}
-
-	return nil
+	return sdk.DestinationWithMiddleware(&Destination{})
 }
 
 func (d *Destination) Open(ctx context.Context) error {
