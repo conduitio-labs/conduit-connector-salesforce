@@ -5,7 +5,7 @@ package pubsub
 import (
 	context "context"
 
-	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1"
 	grpc "google.golang.org/grpc"
 
 	mock "github.com/stretchr/testify/mock"

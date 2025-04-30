@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )

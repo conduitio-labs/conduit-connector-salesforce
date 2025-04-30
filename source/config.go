@@ -22,7 +22,6 @@ import (
 	"time"
 
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
-
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
