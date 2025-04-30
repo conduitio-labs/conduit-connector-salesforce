@@ -5,17 +5,21 @@ disable-version-string: true
 filename: "mock_{{.InterfaceName | snakecase}}_test.go"
 mockname: "mock{{.InterfaceName | firstUpper}}"
 dir: "{{.InterfaceDir}}"
+log-level: "error"
+# deprecations
+resolve-type-alias: False
+issue-845-fix: True
 packages:
-  github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1:
+  github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1:
     interfaces:
       PubSubClient:
         config:
-          dir: pubsub
+          dir: internal/pubsub
           inpackage: false
           outpkg: pubsub
       PubSub_SubscribeClient:
         config:
-          dir: pubsub
+          dir: internal/pubsub
           inpackage: false
           outpkg: pubsub
   github.com/conduitio-labs/conduit-connector-salesforce/source:

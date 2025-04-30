@@ -231,7 +231,7 @@ func (_c *mockPubSub_SubscribeClient_Recv_Call) RunAndReturn(run func() (*eventb
 }
 
 // RecvMsg provides a mock function with given fields: m
-func (_m *mockPubSub_SubscribeClient) RecvMsg(m interface{}) error {
+func (_m *mockPubSub_SubscribeClient) RecvMsg(m any) error {
 	ret := _m.Called(m)
 
 	if len(ret) == 0 {
@@ -239,7 +239,7 @@ func (_m *mockPubSub_SubscribeClient) RecvMsg(m interface{}) error {
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(interface{}) error); ok {
+	if rf, ok := ret.Get(0).(func(any) error); ok {
 		r0 = rf(m)
 	} else {
 		r0 = ret.Error(0)
@@ -254,14 +254,14 @@ type mockPubSub_SubscribeClient_RecvMsg_Call struct {
 }
 
 // RecvMsg is a helper method to define mock.On call
-//   - m interface{}
+//   - m any
 func (_e *mockPubSub_SubscribeClient_Expecter) RecvMsg(m interface{}) *mockPubSub_SubscribeClient_RecvMsg_Call {
 	return &mockPubSub_SubscribeClient_RecvMsg_Call{Call: _e.mock.On("RecvMsg", m)}
 }
 
-func (_c *mockPubSub_SubscribeClient_RecvMsg_Call) Run(run func(m interface{})) *mockPubSub_SubscribeClient_RecvMsg_Call {
+func (_c *mockPubSub_SubscribeClient_RecvMsg_Call) Run(run func(m any)) *mockPubSub_SubscribeClient_RecvMsg_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(interface{}))
+		run(args[0].(any))
 	})
 	return _c
 }
@@ -271,7 +271,7 @@ func (_c *mockPubSub_SubscribeClient_RecvMsg_Call) Return(_a0 error) *mockPubSub
 	return _c
 }
 
-func (_c *mockPubSub_SubscribeClient_RecvMsg_Call) RunAndReturn(run func(interface{}) error) *mockPubSub_SubscribeClient_RecvMsg_Call {
+func (_c *mockPubSub_SubscribeClient_RecvMsg_Call) RunAndReturn(run func(any) error) *mockPubSub_SubscribeClient_RecvMsg_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -323,7 +323,7 @@ func (_c *mockPubSub_SubscribeClient_Send_Call) RunAndReturn(run func(*eventbusv
 }
 
 // SendMsg provides a mock function with given fields: m
-func (_m *mockPubSub_SubscribeClient) SendMsg(m interface{}) error {
+func (_m *mockPubSub_SubscribeClient) SendMsg(m any) error {
 	ret := _m.Called(m)
 
 	if len(ret) == 0 {
@@ -331,7 +331,7 @@ func (_m *mockPubSub_SubscribeClient) SendMsg(m interface{}) error {
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(interface{}) error); ok {
+	if rf, ok := ret.Get(0).(func(any) error); ok {
 		r0 = rf(m)
 	} else {
 		r0 = ret.Error(0)
@@ -346,14 +346,14 @@ type mockPubSub_SubscribeClient_SendMsg_Call struct {
 }
 
 // SendMsg is a helper method to define mock.On call
-//   - m interface{}
+//   - m any
 func (_e *mockPubSub_SubscribeClient_Expecter) SendMsg(m interface{}) *mockPubSub_SubscribeClient_SendMsg_Call {
 	return &mockPubSub_SubscribeClient_SendMsg_Call{Call: _e.mock.On("SendMsg", m)}
 }
 
-func (_c *mockPubSub_SubscribeClient_SendMsg_Call) Run(run func(m interface{})) *mockPubSub_SubscribeClient_SendMsg_Call {
+func (_c *mockPubSub_SubscribeClient_SendMsg_Call) Run(run func(m any)) *mockPubSub_SubscribeClient_SendMsg_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(interface{}))
+		run(args[0].(any))
 	})
 	return _c
 }
@@ -363,7 +363,7 @@ func (_c *mockPubSub_SubscribeClient_SendMsg_Call) Return(_a0 error) *mockPubSub
 	return _c
 }
 
-func (_c *mockPubSub_SubscribeClient_SendMsg_Call) RunAndReturn(run func(interface{}) error) *mockPubSub_SubscribeClient_SendMsg_Call {
+func (_c *mockPubSub_SubscribeClient_SendMsg_Call) RunAndReturn(run func(any) error) *mockPubSub_SubscribeClient_SendMsg_Call {
 	_c.Call.Return(run)
 	return _c
 }
