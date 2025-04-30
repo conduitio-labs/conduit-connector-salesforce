@@ -22,16 +22,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-errors/errors"
-	"github.com/google/uuid"
-
 	rt "github.com/avast/retry-go/v4"
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
-	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/proto/eventbus/v1"
+	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
-
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/go-errors/errors"
+	"github.com/google/uuid"
 	"github.com/linkedin/goavro/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

@@ -19,12 +19,11 @@ import (
 	"encoding/base64"
 	"time"
 
-	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/pubsub"
-	"github.com/go-errors/errors"
-
+	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/internal/pubsub"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/go-errors/errors"
 )
 
 type client interface {
