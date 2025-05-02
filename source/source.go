@@ -67,7 +67,7 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 		return errors.Errorf("error parsing sdk position: %w", err)
 	}
 
-	client, err := pubsub.NewGRPCClient(ctx, s.config.Config, "subscribe")
+	client, err := pubsub.NewGRPCClient(s.config.Config, "subscribe")
 	if err != nil {
 		return errors.Errorf("could not create GRPCClient: %w", err)
 	}

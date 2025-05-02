@@ -16,6 +16,7 @@ package pubsub
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"io"
 	"strings"
@@ -30,7 +31,7 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
 	"github.com/google/uuid"
-	"github.com/linkedin/goavro/v2"
+	"github.com/hamba/avro"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -60,9 +61,6 @@ type Client struct {
 
 	conn         *grpc.ClientConn
 	pubSubClient eventbusv1.PubSubClient
-
-	codecCache  map[string]*goavro.Codec
-	unionFields map[string]map[string]struct{}
 
 	buffer chan ConnectResponseEvent
 
@@ -106,21 +104,9 @@ const (
 )
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
-func NewGRPCClient(ctx context.Context, config config.Config, action string) (*Client, error) {
-	sdk.Logger(ctx).Info().
-		Msgf("Starting GRPC client")
-
-	var transportCreds credentials.TransportCredentials
-	var replayPreset eventbusv1.ReplayPreset
-
-	if config.InsecureSkipVerify {
-		transportCreds = insecure.NewCredentials()
-	} else {
-		transportCreds = credentials.NewClientTLSFromCert(getCerts(), "")
-	}
-
+func NewGRPCClient(config config.Config, action string) (*Client, error) {
 	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(transportCreds),
+		grpc.WithTransportCredentials(transportCredentials(config.InsecureSkipVerify)),
 	}
 
 	conn, err := grpc.NewClient(config.PubsubAddress, dialOpts...)
@@ -136,9 +122,6 @@ func NewGRPCClient(ctx context.Context, config config.Config, action string) (*C
 	return &Client{
 		conn:         conn,
 		pubSubClient: eventbusv1.NewPubSubClient(conn),
-		codecCache:   make(map[string]*goavro.Codec),
-		unionFields:  make(map[string]map[string]struct{}),
-		replayPreset: replayPreset,
 		buffer:       make(chan ConnectResponseEvent),
 		oauth:        &oauth{Credentials: creds},
 		maxRetries:   config.RetryCount,
@@ -306,7 +289,6 @@ func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
 // Write attempts to publish event with retry for any pubsub connection errors.
 func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 	var (
-		codec     *goavro.Codec
 		err       error
 		topicInfo *eventbusv1.TopicInfo
 		retry     bool
@@ -333,21 +315,19 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 			Str("topic", topicInfo.TopicName).
 			Msg("Started publishing event")
 
-		codec, err = c.fetchCodec(ctx, topicInfo.SchemaId)
+		schema, err := c.fetchSchema(ctx, topicInfo.SchemaId)
 		if err != nil {
-			retry = false
-			return errors.Errorf("error fetchiing codec for topic %s: %w", topicInfo.TopicName, err)
+			return errors.Errorf("failed to fetch schema: %w", err)
 		}
 
-		avroEncoded, err := c.prepareRecord(codec, r)
+		data, err := avro.Marshal(schema, r.Payload.After)
 		if err != nil {
-			retry = false
-			return errors.Errorf("error preparing event payload: %w", err)
+			return errors.Errorf("failed to marshal data to schema %q: %w", topicInfo.SchemaId, err)
 		}
 
 		event := &eventbusv1.ProducerEvent{
 			SchemaId: topicInfo.SchemaId,
-			Payload:  avroEncoded,
+			Payload:  data,
 			Id:       recordID.String(),
 		}
 
@@ -384,23 +364,6 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 	}
 
 	return err
-}
-
-func (c *Client) prepareRecord(codec *goavro.Codec, r opencdc.Record) ([]byte, error) {
-	data, err := extractPayload(r.Operation, r.Payload)
-	if err != nil {
-		return nil, errors.Errorf("failed to extract payload data: %w", err)
-	}
-	avroPrepared, err := validateAndPreparePayload(data, codec.Schema(), c.userID)
-	if err != nil {
-		return nil, errors.Errorf("error validating and preparing avro data:%w", err)
-	}
-
-	avroEncoded, err := codec.BinaryFromNative(nil, avroPrepared)
-	if err != nil {
-		return nil, errors.Errorf("error encoding data to avro: %w", err)
-	}
-	return avroEncoded, nil
 }
 
 func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) error {
@@ -577,27 +540,41 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 			Str("event_id", e.Event.Id).
 			Msg("decoding event")
 
-		codec, err := c.fetchCodec(ctx, e.Event.SchemaId)
+		/*
+			codec, err := c.fetchCodec(ctx, e.Event.SchemaId)
+			if err != nil {
+				return events, err
+			}
+
+			parsed, _, err := codec.NativeFromBinary(e.Event.Payload)
+			if err != nil {
+				return events, err
+			}
+
+			payload, ok := parsed.(map[string]interface{})
+			if !ok {
+				return events, errors.Errorf("invalid payload type %T", payload)
+			}
+
+		*/
+
+		schema, err := c.fetchSchema(ctx, e.Event.SchemaId)
 		if err != nil {
-			return events, err
+			return events, errors.Errorf("failed to fetch schema: %w", err)
 		}
 
-		parsed, _, err := codec.NativeFromBinary(e.Event.Payload)
-		if err != nil {
-			return events, err
+		data := make(map[string]any)
+
+		if err := avro.Unmarshal(schema, e.Event.Payload, &data); err != nil {
+			return events, errors.Errorf("failed to unmarshal data: %w", err)
 		}
 
-		payload, ok := parsed.(map[string]interface{})
-		if !ok {
-			return events, errors.Errorf("invalid payload type %T", payload)
-		}
-
-		logger.Trace().Fields(payload).Msg("decoded event")
+		logger.Trace().Fields(data).Msg("decoded event")
 
 		events = append(events, ConnectResponseEvent{
 			ReplayID:   e.ReplayId,
 			EventID:    e.Event.Id,
-			Data:       flattenUnionFields(ctx, payload, c.unionFields[e.Event.SchemaId]),
+			Data:       data,
 			Topic:      topic,
 			ReceivedAt: time.Now(),
 		})
@@ -608,42 +585,19 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 
 // Unexported helper function to retrieve the cached codec from the Client's schema cache. If the schema ID is not found in the cache,
 // then a GetSchema call is made and the corresponding codec is cached for future use.
-func (c *Client) fetchCodec(ctx context.Context, schemaID string) (*goavro.Codec, error) {
-	logger := sdk.Logger(ctx).
-		With().
-		Str("at", "client.fetchcodec").
-		Str("schema_id", schemaID).
-		Logger()
-
-	codec, ok := c.codecCache[schemaID]
-	if ok {
-		return codec, nil
-	}
-
-	schema, err := c.GetSchema(schemaID)
+func (c *Client) fetchSchema(ctx context.Context, schemaID string) (avro.Schema, error) {
+	schemaInfo, err := c.GetSchema(schemaID)
 	if err != nil {
 		return nil, errors.Errorf("error making getschema request for uncached schema - %w", err)
 	}
 
-	schemaJSON := schema.GetSchemaJson()
-
-	logger.Trace().Str("schema_json", schemaJSON).Msg("fetched schema")
-
-	codec, err = goavro.NewCodec(schemaJSON)
+	sdk.Logger(ctx).Info().Str("schema", schemaInfo.GetSchemaJson()).Msg("schema")
+	avroSchema, err := avro.Parse(schemaInfo.GetSchemaJson())
 	if err != nil {
-		return nil, errors.Errorf("error creating codec from uncached schema - %w", err)
+		return nil, errors.Errorf("failed to parse schema: %w", err)
 	}
 
-	c.codecCache[schemaID] = codec
-
-	unionFields, err := parseUnionFields(ctx, schemaJSON)
-	if err != nil {
-		return nil, errors.Errorf("error parsing union fields from schema: %w", err)
-	}
-
-	c.unionFields[schemaID] = unionFields
-
-	return codec, nil
+	return avroSchema, nil
 }
 
 // Returns a new context with the necessary authentication parameters for the gRPC server.
@@ -860,4 +814,25 @@ func (c *Client) canAccessTopic(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func transportCredentials(skipVerify bool) credentials.TransportCredentials {
+	if skipVerify {
+		return insecure.NewCredentials()
+	}
+
+	if pool, err := x509.SystemCertPool(); err == nil {
+		return credentials.NewClientTLSFromCert(pool, "")
+	}
+
+	return credentials.NewClientTLSFromCert(x509.NewCertPool(), "")
+}
+
+// checks connection error.
+func connErr(err error) bool {
+	return strings.Contains(err.Error(), "is unavailable")
+}
+
+func invalidReplayIDErr(err error) bool {
+	return strings.Contains(strings.ToLower(err.Error()), "replay id validation failed")
 }
