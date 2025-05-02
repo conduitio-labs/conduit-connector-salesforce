@@ -34,12 +34,12 @@ func Test_SchemaUnmarshal(t *testing.T) {
 	decoded, encoded := encodedTestData(t, testSchema)
 
 	tests := []struct {
-		name     string
-		schemaClient   func(t *testing.T) *SchemaClient
-		schemaID string
-		data     []byte
-		expected map[string]any
-		wantErr  error
+		name         string
+		schemaClient func(t *testing.T) *SchemaClient
+		schemaID     string
+		data         []byte
+		expected     map[string]any
+		wantErr      error
 	}{
 		{
 			name:     "unmarshal success",
@@ -151,12 +151,12 @@ func Test_SchemaMarshal(t *testing.T) {
 	decoded, encoded := encodedTestData(t, testSchema)
 
 	tests := []struct {
-		name     string
-		schemaClient   func(t *testing.T) *SchemaClient
-		schemaID string
-		data     map[string]any
-		expected []byte
-		wantErr  error
+		name         string
+		schemaClient func(t *testing.T) *SchemaClient
+		schemaID     string
+		data         map[string]any
+		expected     []byte
+		wantErr      error
 	}{
 		{
 			name:     "marshal success",
