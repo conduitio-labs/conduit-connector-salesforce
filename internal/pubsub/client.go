@@ -294,6 +294,10 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 		retry     bool
 	)
 
+	if r.Operation == opencdc.OperationDelete {
+		return errors.Errorf("delete operation records are not supported")
+	}
+
 	topic := Topic{
 		topicName:  c.topicNames[0],
 		retryCount: c.maxRetries,
@@ -539,24 +543,6 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 			Str("schema_id", e.Event.SchemaId).
 			Str("event_id", e.Event.Id).
 			Msg("decoding event")
-
-		/*
-			codec, err := c.fetchCodec(ctx, e.Event.SchemaId)
-			if err != nil {
-				return events, err
-			}
-
-			parsed, _, err := codec.NativeFromBinary(e.Event.Payload)
-			if err != nil {
-				return events, err
-			}
-
-			payload, ok := parsed.(map[string]interface{})
-			if !ok {
-				return events, errors.Errorf("invalid payload type %T", payload)
-			}
-
-		*/
 
 		schema, err := c.fetchSchema(ctx, e.Event.SchemaId)
 		if err != nil {
