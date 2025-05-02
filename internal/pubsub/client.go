@@ -1,4 +1,4 @@
-// Copyright © 2024 Meroxa, Inc.
+// Copyright © 2025 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
 	"github.com/google/uuid"
-	"github.com/hamba/avro"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
@@ -61,6 +60,7 @@ type Client struct {
 
 	conn         *grpc.ClientConn
 	pubSubClient eventbusv1.PubSubClient
+	schema       *Schema
 
 	buffer chan ConnectResponseEvent
 
@@ -113,6 +113,7 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 	if err != nil {
 		return nil, errors.Errorf("gRPC dial: %w", err)
 	}
+	c := eventbusv1.NewPubSubClient(conn)
 
 	creds, err := NewCredentials(config.ClientID, config.ClientSecret, config.OAuthEndpoint)
 	if err != nil {
@@ -120,8 +121,9 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 	}
 
 	return &Client{
+		schema:       newSchema(c),
 		conn:         conn,
-		pubSubClient: eventbusv1.NewPubSubClient(conn),
+		pubSubClient: c,
 		buffer:       make(chan ConnectResponseEvent),
 		oauth:        &oauth{Credentials: creds},
 		maxRetries:   config.RetryCount,
@@ -260,31 +262,6 @@ func (c *Client) GetTopic(topic string) (*eventbusv1.TopicInfo, error) {
 	return resp, nil
 }
 
-// Wrapper function around the GetSchema RPC. This will add the oauth credentials and make a call to fetch data about a specific schema.
-func (c *Client) GetSchema(schemaID string) (*eventbusv1.SchemaInfo, error) {
-	var trailer metadata.MD
-
-	req := &eventbusv1.SchemaRequest{
-		SchemaId: schemaID,
-	}
-
-	ctx, cancel := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
-	defer cancel()
-
-	resp, err := c.pubSubClient.GetSchema(ctx, req, grpc.Trailer(&trailer))
-	sdk.Logger(ctx).
-		Debug().
-		Str("at", "client.getschema").
-		Bool("trailers", true).
-		Fields(trailer).
-		Msg("retrieved schema")
-	if err != nil {
-		return nil, errors.Errorf("error getting schema from salesforce api - %w", err)
-	}
-
-	return resp, nil
-}
-
 // TODO - refactor this to allow for multi topic support.
 // Write attempts to publish event with retry for any pubsub connection errors.
 func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
@@ -319,12 +296,7 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 			Str("topic", topicInfo.TopicName).
 			Msg("Started publishing event")
 
-		schema, err := c.fetchSchema(ctx, topicInfo.SchemaId)
-		if err != nil {
-			return errors.Errorf("failed to fetch schema: %w", err)
-		}
-
-		data, err := avro.Marshal(schema, r.Payload.After)
+		data, err := c.schema.Marshal(ctx, topicInfo.SchemaId, r.Payload.After.(opencdc.StructuredData))
 		if err != nil {
 			return errors.Errorf("failed to marshal data to schema %q: %w", topicInfo.SchemaId, err)
 		}
@@ -544,14 +516,8 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 			Str("event_id", e.Event.Id).
 			Msg("decoding event")
 
-		schema, err := c.fetchSchema(ctx, e.Event.SchemaId)
+		data, err := c.schema.Unmarshal(ctx, e.Event.SchemaId, e.Event.Payload)
 		if err != nil {
-			return events, errors.Errorf("failed to fetch schema: %w", err)
-		}
-
-		data := make(map[string]any)
-
-		if err := avro.Unmarshal(schema, e.Event.Payload, &data); err != nil {
 			return events, errors.Errorf("failed to unmarshal data: %w", err)
 		}
 
@@ -567,23 +533,6 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 	}
 
 	return events, nil
-}
-
-// Unexported helper function to retrieve the cached codec from the Client's schema cache. If the schema ID is not found in the cache,
-// then a GetSchema call is made and the corresponding codec is cached for future use.
-func (c *Client) fetchSchema(ctx context.Context, schemaID string) (avro.Schema, error) {
-	schemaInfo, err := c.GetSchema(schemaID)
-	if err != nil {
-		return nil, errors.Errorf("error making getschema request for uncached schema - %w", err)
-	}
-
-	sdk.Logger(ctx).Info().Str("schema", schemaInfo.GetSchemaJson()).Msg("schema")
-	avroSchema, err := avro.Parse(schemaInfo.GetSchemaJson())
-	if err != nil {
-		return nil, errors.Errorf("failed to parse schema: %w", err)
-	}
-
-	return avroSchema, nil
 }
 
 // Returns a new context with the necessary authentication parameters for the gRPC server.
