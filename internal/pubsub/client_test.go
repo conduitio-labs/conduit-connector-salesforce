@@ -25,22 +25,13 @@ import (
 )
 
 func TestPubSubClient_Initialize(t *testing.T) {
-	mockAuth := newMockAuthenticator(t)
 	ctx := context.Background()
 
-	mockAuth.EXPECT().
-		Login().
-		Return(&LoginResponse{AccessToken: "token", InstanceURL: "instance-url"}, nil)
-
-	mockAuth.EXPECT().
-		UserInfo("token").
-		Return(
-			&UserInfoResponse{UserID: "my-user-id", OrganizationID: "org-id"},
-			nil,
-		)
+	mockAuth := newMockAuthorizer(t)
+	mockAuth.EXPECT().Authorize(ctx).Return(nil)
+	mockAuth.EXPECT().Context(ctx).Return(ctx)
 
 	mockPubSubClient := newMockPubSubClient(t)
-
 	mockPubSubClient.EXPECT().GetTopic(
 		mock.Anything,
 		&eventbusv1.TopicRequest{TopicName: "my-topic"},

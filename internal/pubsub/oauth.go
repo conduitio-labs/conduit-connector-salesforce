@@ -17,152 +17,194 @@ package pubsub
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-errors/errors"
+	"google.golang.org/grpc/metadata"
 )
-
-type Authenticator interface {
-	Login() (*LoginResponse, error)
-	UserInfo(string) (*UserInfoResponse, error)
-}
 
 const (
+	tokenHeader      = "accesstoken"
+	instanceHeader   = "instanceurl"
+	tenantHeader     = "tenantid"
 	loginEndpoint    = "/services/oauth2/token"
 	userInfoEndpoint = "/services/oauth2/userinfo"
+	oauthDialTimeout = 5 * time.Second
 )
 
-var OAuthDialTimeout = 5 * time.Second
+type oauth struct {
+	rw sync.RWMutex
 
-type LoginResponse struct {
-	AccessToken      string `json:"access_token"`
-	InstanceURL      string `json:"instance_url"`
-	ID               string `json:"id"`
-	TokenType        string `json:"token_type"`
-	IssuedAt         string `json:"issued_at"`
-	Signature        string `json:"signature"`
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description"`
+	clientID     string
+	clientSecret string
+
+	oauthEndpoint *url.URL
+	loginURL      string
+	userInfoURL   string
+
+	authdata metadata.MD
 }
 
-func (l LoginResponse) Err() error {
-	return errors.Errorf("%s: %s", l.Error, l.ErrorDescription)
+type token struct {
+	ID          string `json:"id"`
+	AccessToken string `json:"access_token"`
+	InstanceURL string `json:"instance_url"`
+	TokenType   string `json:"token_type"`
+	IssuedAt    string `json:"issued_at"`
+	Signature   string `json:"signature"`
 }
 
-type UserInfoResponse struct {
-	UserID           string `json:"user_id"`
-	OrganizationID   string `json:"organization_id"`
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description"`
+type user struct {
+	UserID string `json:"user_id"`
+	OrgID  string `json:"organization_id"`
 }
 
-func (u UserInfoResponse) Err() error {
-	return errors.Errorf("%s: %s", u.Error, u.ErrorDescription)
+type apiError struct {
+	Err  string `json:"error"`
+	Desc string `json:"error_description"`
 }
 
-type Credentials struct {
-	ClientID, ClientSecret string
-	OAuthEndpoint          *url.URL
+// Error returns a string with the error and description.
+func (e apiError) Error() string {
+	return e.Err + ": " + e.Desc
 }
 
-func NewCredentials(clientID, secret, endpoint string) (Credentials, error) {
+func newAuthorizer(clientID, secret, endpoint string) (*oauth, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil {
-		return Credentials{}, errors.Errorf("failed to parse oauth endpoint url: %w", err)
+		return nil, errors.Errorf("failed to parse oauth endpoint url: %w", err)
 	}
 
-	return Credentials{
-		ClientID:      clientID,
-		ClientSecret:  secret,
-		OAuthEndpoint: u,
+	return &oauth{
+		clientID:      clientID,
+		clientSecret:  secret,
+		oauthEndpoint: u,
+		loginURL:      u.JoinPath(loginEndpoint).String(),
+		userInfoURL:   u.JoinPath(userInfoEndpoint).String(),
+		authdata:      nil,
 	}, nil
 }
 
-type oauth struct {
-	Credentials
+// Authorize retrives an oauth token and information about the associated user.
+// Returns error when:
+// * Failure to obtain token
+// * Failure to obtain user data associated with the token.
+func (a *oauth) Authorize(ctx context.Context) error {
+	a.rw.Lock()
+	defer a.rw.Unlock()
+
+	token, err := a.obtainToken(ctx)
+	if err != nil {
+		return errors.Errorf("failed to login %q: %w", a.clientID, err)
+	}
+
+	user, err := a.obtainUser(ctx, token.AccessToken)
+	if err != nil {
+		return errors.Errorf("failed to retrieve user info %q: %w", a.clientID, err)
+	}
+
+	a.authdata = metadata.Pairs(
+		tokenHeader, token.AccessToken,
+		instanceHeader, token.InstanceURL,
+		tenantHeader, user.OrgID,
+	)
+
+	return nil
 }
 
-func (a oauth) Login() (*LoginResponse, error) {
-	body := url.Values{}
-	body.Set("grant_type", "client_credentials")
-	body.Set("client_id", a.ClientID)
-	body.Set("client_secret", a.ClientSecret)
+// obtainToken request new oauth token from the salesforce endpoint.
+// Returns error when the request fails.
+func (a *oauth) obtainToken(ctx context.Context) (*token, error) {
+	v := url.Values{}
+	v.Set("grant_type", "client_credentials")
+	v.Set("client_id", a.clientID)
+	v.Set("client_secret", a.clientSecret)
 
-	ctx, cancelFn := context.WithTimeout(context.Background(), OAuthDialTimeout)
-	defer cancelFn()
+	body := strings.NewReader(v.Encode())
 
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		a.loginURL(),
-		strings.NewReader(body.Encode()),
-	)
+	ctx, cancel := context.WithTimeout(ctx, oauthDialTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.loginURL, body)
 	if err != nil {
-		return nil, errors.Errorf("failed to make login req: %w", err)
+		return nil, errors.Errorf("failed to create token req: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	httpResp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, errors.Errorf("http oauth request failed: %w", err)
 	}
-	defer httpResp.Body.Close()
+	defer resp.Body.Close()
 
-	var loginResp LoginResponse
-	if err := json.NewDecoder(httpResp.Body).Decode(&loginResp); err != nil {
-		return nil, errors.Errorf("error decoding login response: %w", err)
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("oauth req failed: %w", a.apiErr(resp.Body))
 	}
 
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, errors.Errorf(
-			"unexpected oauth login (status: %d) response: %w", httpResp.StatusCode, loginResp.Err(),
-		)
+	var t token
+	if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
+		return nil, errors.Errorf("error decoding token %q response: %w", a.clientID, err)
 	}
 
-	return &loginResp, nil
+	return &t, nil
 }
 
-func (a oauth) UserInfo(accessToken string) (*UserInfoResponse, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), OAuthDialTimeout)
+// userInfo retrives the organization and user ID associated with the token.
+// Returns error when the request fails.
+func (a *oauth) obtainUser(ctx context.Context, token string) (*user, error) {
+	ctx, cancel := context.WithTimeout(ctx, oauthDialTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.userInfoURL(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.userInfoURL, nil)
 	if err != nil {
 		return nil, errors.Errorf("failed to make userinfo req: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Authorization", "Bearer "+token)
 
-	httpResp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, errors.Errorf("error getting user info response - %w", err)
+		return nil, errors.Errorf("http userinfo request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, errors.Errorf("userinfo req failed: %w", a.apiErr(resp.Body))
 	}
 
-	defer httpResp.Body.Close()
-
-	var userInfoResp UserInfoResponse
-	err = json.NewDecoder(httpResp.Body).Decode(&userInfoResp)
-	if err != nil {
-		return nil, errors.Errorf("error decoding user info - %w", err)
+	var u user
+	if err := json.NewDecoder(resp.Body).Decode(&u); err != nil {
+		return nil, errors.Errorf("failed to decode user info %q: %w", a.clientID, err)
 	}
 
-	if httpResp.StatusCode != http.StatusOK {
-		return nil, errors.Errorf(
-			"unexpected oauth userInfo (status: %d) response: %w", httpResp.StatusCode, userInfoResp.Err(),
-		)
-	}
-
-	return &userInfoResp, nil
+	return &u, nil
 }
 
-func (a oauth) loginURL() string {
-	return a.OAuthEndpoint.JoinPath(loginEndpoint).String()
+// apiErr extracts an error from the body reader.
+// Returns the extracted error.
+func (a *oauth) apiErr(r io.Reader) error {
+	var decodedErr apiError
+	if err := json.NewDecoder(r).Decode(&decodedErr); err != nil {
+		return errors.Errorf("failed to decode error: %w", err)
+	}
+
+	return decodedErr
 }
 
-func (a oauth) userInfoURL() string {
-	return a.OAuthEndpoint.JoinPath(userInfoEndpoint).String()
+// Context returns new gRPC metadata context containing authentication data.
+func (a *oauth) Context(ctx context.Context) context.Context {
+	if a.authdata == nil {
+		panic("need to authorize first")
+	}
+
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+
+	return metadata.NewOutgoingContext(ctx, a.authdata)
 }

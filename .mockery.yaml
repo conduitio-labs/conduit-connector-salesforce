@@ -24,5 +24,7 @@ packages:
           outpkg: pubsub
   github.com/conduitio-labs/conduit-connector-salesforce/source:
     interfaces:
-      authenticator: null
       client: null
+  github.com/conduitio-labs/conduit-connector-salesforce/internal/pubsub:
+    interfaces:
+      authorizer: null

@@ -20,7 +20,6 @@ import (
 	"encoding/base64"
 	"io"
 	"strings"
-	"sync"
 	"time"
 
 	rt "github.com/avast/retry-go/v4"
@@ -43,20 +42,21 @@ var (
 	RetryDelay      = 10 * time.Second
 )
 
+type authorizer interface {
+	// Authorize retrieves new access token.
+	Authorize(context.Context) error
+	// Context returns context containing authorization credentials.
+	Context(context.Context) context.Context
+}
+
 var ErrEndOfRecords = errors.New("end of records from stream")
 
 type Client struct {
-	mu sync.Mutex
-
-	accessToken  string
-	instanceURL  string
-	userID       string
-	orgID        string
 	replayPreset eventbusv1.ReplayPreset
 
 	pubSubAction pubSubAction
 
-	oauth Authenticator
+	oauth authorizer
 
 	conn         *grpc.ClientConn
 	pubSubClient eventbusv1.PubSubClient
@@ -79,11 +79,6 @@ type Topic struct {
 	replayID   []byte
 }
 
-type PublishEvent struct {
-	event *eventbusv1.ProducerEvent
-	topic Topic
-}
-
 type ConnectResponseEvent struct {
 	Data            map[string]interface{}
 	EventID         string
@@ -94,14 +89,6 @@ type ConnectResponseEvent struct {
 }
 
 type pubSubAction string
-
-const (
-	tokenHeader                 = "accesstoken"
-	instanceHeader              = "instanceurl"
-	tenantHeader                = "tenantid"
-	subscribe      pubSubAction = "subscribe"
-	publish        pubSubAction = "publish"
-)
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(config config.Config, action string) (*Client, error) {
@@ -115,9 +102,9 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 	}
 	c := eventbusv1.NewPubSubClient(conn)
 
-	creds, err := NewCredentials(config.ClientID, config.ClientSecret, config.OAuthEndpoint)
+	oauth, err := newAuthorizer(config.ClientID, config.ClientSecret, config.OAuthEndpoint)
 	if err != nil {
-		return nil, err
+		return nil, errors.Errorf("failed to initialize auth: %w", err)
 	}
 
 	return &Client{
@@ -125,7 +112,7 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 		conn:         conn,
 		pubSubClient: c,
 		buffer:       make(chan ConnectResponseEvent),
-		oauth:        &oauth{Credentials: creds},
+		oauth:        oauth,
 		maxRetries:   config.RetryCount,
 		pubSubAction: pubSubAction(action),
 	}, nil
@@ -135,7 +122,7 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 func (c *Client) Initialize(ctx context.Context, topics []string) error {
 	c.topicNames = topics
 
-	if err := c.login(ctx); err != nil {
+	if err := c.oauth.Authorize(ctx); err != nil {
 		return err
 	}
 
@@ -204,19 +191,17 @@ func (c *Client) Next(ctx context.Context) (opencdc.Record, error) {
 	}
 }
 
-// Stop ends CDC processing.
-func (c *Client) Stop(ctx context.Context) {
+func (c *Client) Teardown(ctx context.Context) error {
+	// cancel processing loops
 	if c.stop != nil {
 		c.stop()
 	}
 
-	sdk.Logger(ctx).Debug().
-		Msgf("stopping pubsub client on topics %q", strings.Join(c.topicNames, ","))
+	// close gRPC connection
+	if c.conn != nil {
+		defer c.conn.Close()
+	}
 
-	c.topicNames = nil
-}
-
-func (c *Client) Wait(ctx context.Context) error {
 	tctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
 
@@ -224,6 +209,7 @@ func (c *Client) Wait(ctx context.Context) error {
 		return nil
 	}
 
+	// wait for tomb to exit.
 	select {
 	case <-tctx.Done():
 		return tctx.Err()
@@ -232,27 +218,14 @@ func (c *Client) Wait(ctx context.Context) error {
 	}
 }
 
-// Closes the underlying connection to the gRPC server.
-func (c *Client) Close(ctx context.Context) error {
-	if c.conn != nil {
-		sdk.Logger(ctx).Debug().Msg("closing pubsub gRPC connection")
-
-		return c.conn.Close()
-	}
-
-	sdk.Logger(ctx).Debug().Msg("no-op, pubsub connection is not open")
-
-	return nil
-}
-
-func (c *Client) GetTopic(topic string) (*eventbusv1.TopicInfo, error) {
+func (c *Client) GetTopic(ctx context.Context, topic string) (*eventbusv1.TopicInfo, error) {
 	var trailer metadata.MD
 
 	req := &eventbusv1.TopicRequest{
 		TopicName: topic,
 	}
 
-	ctx, cancel := context.WithTimeout(c.getAuthContext(), GRPCCallTimeout)
+	ctx, cancel := context.WithTimeout(c.oauth.Context(ctx), GRPCCallTimeout)
 	defer cancel()
 
 	resp, err := c.pubSubClient.GetTopic(ctx, req, grpc.Trailer(&trailer))
@@ -287,7 +260,7 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 
 	err = rt.Do(func() error {
 		recordID := uuid.New()
-		topicInfo, err = c.GetTopic(topic.topicName)
+		topicInfo, err = c.GetTopic(ctx, topic.topicName)
 		if err != nil {
 			return errors.Errorf("error on publish, cannot retrieve topic %s : %w", c.topicNames[0], err)
 		}
@@ -307,12 +280,11 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 			Id:       recordID.String(),
 		}
 
-		err = c.Publish(ctx, &PublishEvent{
-			event: event,
-			topic: topic,
-		})
+		if err := c.Publish(ctx, topic.topicName, event); err != nil {
+			return errors.Errorf("failed to publish event: %w", err)
+		}
 
-		return err
+		return nil
 	},
 		rt.Delay(RetryDelay),
 		rt.Attempts(topic.retryCount),
@@ -342,18 +314,16 @@ func (c *Client) Write(ctx context.Context, r opencdc.Record) error {
 	return err
 }
 
-func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) error {
-	publishRequest := eventbusv1.PublishRequest{
-		TopicName: publishEvent.topic.topicName,
-		Events:    []*eventbusv1.ProducerEvent{publishEvent.event},
-	}
-
+func (c *Client) Publish(ctx context.Context, topicName string, e *eventbusv1.ProducerEvent) error {
 	sdk.Logger(ctx).Info().
-		Str("topic", publishEvent.topic.topicName).
-		Str("event id", publishEvent.event.GetId()).
+		Str("topic", topicName).
+		Str("event id", e.GetId()).
 		Msg("Publishing event.")
 
-	resp, err := c.pubSubClient.Publish(c.getAuthContext(), &publishRequest)
+	resp, err := c.pubSubClient.Publish(c.oauth.Context(ctx), &eventbusv1.PublishRequest{
+		TopicName: topicName,
+		Events:    []*eventbusv1.ProducerEvent{e},
+	})
 	if err != nil {
 		return errors.Errorf("error on publishing events: %w", err)
 	}
@@ -364,15 +334,14 @@ func (c *Client) Publish(ctx context.Context, publishEvent *PublishEvent) error 
 			sdk.Logger(ctx).Debug().
 				Str("event key", eventRes.GetCorrelationKey()).
 				Str("event", eventRes.String()).
-				Str("topic_name", publishEvent.topic.topicName).
-				Int("number of replays", int(publishEvent.topic.retryCount)). //nolint:gosec //no need to lint retry
+				Str("topic_name", topicName).
 				Msgf("failed to publish event: %s", eventRes.GetError())
-			return errors.Errorf("failed to publish events %s, retry publish: %s", publishEvent.event.GetId(), eventRes.GetError().GetMsg())
+			return errors.Errorf("failed to publish events %s, retry publish: %s", e.GetId(), eventRes.GetError().GetMsg())
 		}
 	}
 
 	sdk.Logger(ctx).Info().
-		Str("topic", publishEvent.topic.topicName).
+		Str("topic", topicName).
 		Str("resp", resp.String()).
 		Str("resp rpc id", resp.GetRpcId()).
 		Msg("Event published")
@@ -392,7 +361,7 @@ func (c *Client) Subscribe(
 ) (eventbusv1.PubSub_SubscribeClient, error) {
 	start := time.Now().UTC()
 
-	subscribeClient, err := c.pubSubClient.Subscribe(c.getAuthContext())
+	subscribeClient, err := c.pubSubClient.Subscribe(c.oauth.Context(ctx))
 	if err != nil {
 		sdk.Logger(ctx).Error().Err(err).
 			Str("topic", topic).
@@ -535,23 +504,12 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 	return events, nil
 }
 
-// Returns a new context with the necessary authentication parameters for the gRPC server.
-func (c *Client) getAuthContext() context.Context {
-	pairs := metadata.Pairs(
-		tokenHeader, c.accessToken,
-		instanceHeader, c.instanceURL,
-		tenantHeader, c.orgID,
-	)
-
-	return metadata.NewOutgoingContext(context.Background(), pairs)
-}
-
 func (c *Client) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
 	var err error
 	sdk.Logger(ctx).Info().Msgf("retry connection on topic %s - retries remaining %d ", topic.topicName, topic.retryCount)
 	topic.retryCount--
 
-	if err = c.login(ctx); err != nil && topic.retryCount <= 0 {
+	if err = c.oauth.Authorize(ctx); err != nil && topic.retryCount <= 0 {
 		return retry, topic, errors.Errorf("failed to refresh auth: %w", err)
 	} else if err != nil {
 		sdk.Logger(ctx).Info().Msgf("received error on login for topic %s - retry - %d : %v ", topic.topicName, topic.retryCount, err)
@@ -696,51 +654,22 @@ func (c *Client) buildRecord(event ConnectResponseEvent) (opencdc.Record, error)
 	), nil
 }
 
-func (c *Client) login(ctx context.Context) error {
-	authResp, err := c.oauth.Login()
-	if err != nil {
-		return err
-	}
-
-	userInfoResp, err := c.oauth.UserInfo(authResp.AccessToken)
-	if err != nil {
-		return err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.accessToken = authResp.AccessToken
-	c.instanceURL = authResp.InstanceURL
-	c.userID = userInfoResp.UserID
-	c.orgID = userInfoResp.OrganizationID
-
-	sdk.Logger(ctx).Info().
-		Str("instance_url", c.instanceURL).
-		Str("user_id", c.userID).
-		Str("org_id", c.orgID).
-		Strs("topics", c.topicNames).
-		Msg("successfully authenticated")
-
-	return nil
-}
-
 // Wrapper function around the GetTopic RPC. This will add the oauth credentials and make a call to fetch data about a specific topic.
 func (c *Client) canAccessTopic(ctx context.Context) error {
 	logger := sdk.Logger(ctx).With().Str("at", "client.canAccessTopic").Logger()
 
 	for _, topic := range c.topicNames {
-		resp, err := c.GetTopic(topic)
+		resp, err := c.GetTopic(ctx, topic)
 		if err != nil {
 			return errors.Errorf(" error retrieving info on topic %s : %s ", topic, err)
 		}
 
 		if c.pubSubAction == "subscribe" && !resp.CanSubscribe {
-			return errors.Errorf("user %q not allowed to subscribe to %q", c.userID, resp.TopicName)
+			return errors.Errorf("not allowed to subscribe to %q", resp.TopicName)
 		}
 
 		if c.pubSubAction == "publish" && !resp.CanPublish {
-			return errors.Errorf("user %q not allowed to publish to %q", c.userID, resp.TopicName)
+			return errors.Errorf("not allowed to publish to %q", resp.TopicName)
 		}
 
 		logger.Debug().

@@ -30,9 +30,7 @@ type client interface {
 	Next(context.Context) (opencdc.Record, error)
 	Initialize(context.Context, []string) error
 	StartCDC(context.Context, string, position.Topics, []string, time.Duration) error
-	Stop(context.Context)
-	Close(context.Context) error
-	Wait(context.Context) error
+	Teardown(context.Context) error
 }
 
 var _ client = (*pubsub.Client)(nil)
@@ -141,19 +139,8 @@ func (s *Source) Ack(ctx context.Context, pos opencdc.Position) error {
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	if s.client == nil {
-		return nil
-	}
-
-	s.client.Stop(ctx)
-
-	if err := s.client.Wait(ctx); err != nil {
-		sdk.Logger(ctx).Error().Err(err).
-			Msg("received error while stopping client")
-	}
-
-	if err := s.client.Close(ctx); err != nil {
-		return errors.Errorf("error when closing subscriber conn: %w", err)
+	if s.client != nil {
+		return s.client.Teardown(ctx)
 	}
 
 	return nil
