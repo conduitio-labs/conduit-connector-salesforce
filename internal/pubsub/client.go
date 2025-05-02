@@ -481,7 +481,7 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 		if errors.Is(err, io.EOF) {
 			return nil, errors.Errorf("pubsub: stream closed when receiving events: %w", err)
 		}
-		if connErr(err) {
+		if isUnavailableErr(err) {
 			logger.Warn().
 				Str("preset", preset.String()).
 				Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
@@ -764,7 +764,7 @@ func transportCredentials(skipVerify bool) credentials.TransportCredentials {
 }
 
 // checks connection error.
-func connErr(err error) bool {
+func isUnavailableErr(err error) bool {
 	return strings.Contains(err.Error(), "is unavailable")
 }
 
