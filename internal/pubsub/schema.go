@@ -23,15 +23,15 @@ import (
 	"github.com/hamba/avro"
 )
 
-// Schema manages schema retrieval from pubsub api. Schemas are cached based on their unique schemaID.
-type Schema struct {
+// SchemaClient manages schema retrieval from pubsub api. Schemas are cached based on their unique schemaID.
+type SchemaClient struct {
 	mu    sync.Mutex
 	c     eventbusv1.PubSubClient
 	cache map[string]avro.Schema
 }
 
-func newSchema(c eventbusv1.PubSubClient) *Schema {
-	return &Schema{
+func newSchemaClient(c eventbusv1.PubSubClient) *SchemaClient {
+	return &SchemaClient{
 		c:     c,
 		cache: make(map[string]avro.Schema),
 		mu:    sync.Mutex{},
@@ -43,7 +43,7 @@ func newSchema(c eventbusv1.PubSubClient) *Schema {
 // Returns error when:
 // * Schema cannot be found.
 // * Data cannot be unmarshalled.
-func (s *Schema) Unmarshal(ctx context.Context, schemaID string, v []byte) (map[string]any, error) {
+func (s *SchemaClient) Unmarshal(ctx context.Context, schemaID string, v []byte) (map[string]any, error) {
 	schema, err := s.schema(ctx, schemaID)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (s *Schema) Unmarshal(ctx context.Context, schemaID string, v []byte) (map[
 // Returns error when:
 // * Schema cannot be found.
 // * Data cannot be marshaled.
-func (s *Schema) Marshal(ctx context.Context, schemaID string, data map[string]any) ([]byte, error) {
+func (s *SchemaClient) Marshal(ctx context.Context, schemaID string, data map[string]any) ([]byte, error) {
 	schema, err := s.schema(ctx, schemaID)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (s *Schema) Marshal(ctx context.Context, schemaID string, data map[string]a
 // Returns error when:
 // * Failed to retrieve schema from pubsub.
 // * Fails to parse the schema JSON.
-func (s *Schema) schema(ctx context.Context, schemaID string) (avro.Schema, error) {
+func (s *SchemaClient) schema(ctx context.Context, schemaID string) (avro.Schema, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

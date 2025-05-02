@@ -60,7 +60,7 @@ type Client struct {
 
 	conn         *grpc.ClientConn
 	pubSubClient eventbusv1.PubSubClient
-	schema       *Schema
+	schema       *SchemaClient
 
 	buffer chan ConnectResponseEvent
 
@@ -121,7 +121,7 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 	}
 
 	return &Client{
-		schema:       newSchema(c),
+		schema:       newSchemaClient(c),
 		conn:         conn,
 		pubSubClient: c,
 		buffer:       make(chan ConnectResponseEvent),

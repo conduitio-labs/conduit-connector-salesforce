@@ -35,7 +35,7 @@ func Test_SchemaUnmarshal(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		schema   func(t *testing.T) *Schema
+		schemaClient   func(t *testing.T) *SchemaClient
 		schemaID string
 		data     []byte
 		expected map[string]any
@@ -44,7 +44,7 @@ func Test_SchemaUnmarshal(t *testing.T) {
 		{
 			name:     "unmarshal success",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
@@ -55,7 +55,7 @@ func Test_SchemaUnmarshal(t *testing.T) {
 					SchemaJson: testSchema,
 				}, nil)
 
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			data:     encoded,
 			expected: decoded,
@@ -63,12 +63,12 @@ func Test_SchemaUnmarshal(t *testing.T) {
 		{
 			name:     "cached unmarshal success ",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 				is := is.New(t)
 
 				c := newMockPubSubClient(t)
-				sch := newSchema(c)
+				sch := newSchemaClient(c)
 				parsed, err := avro.Parse(testSchema)
 				is.NoErr(err)
 				sch.cache["my-schema-123"] = parsed
@@ -80,21 +80,21 @@ func Test_SchemaUnmarshal(t *testing.T) {
 		{
 			name:     "fail to get schema",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
 				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(nil, errors.New("boom"))
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			wantErr: errors.New(`failed to retrieve schema "my-schema-123": boom`),
 		},
 		{
 			name:     "fail to parse schema",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
@@ -105,14 +105,14 @@ func Test_SchemaUnmarshal(t *testing.T) {
 					SchemaJson: "not-schema",
 				}, nil)
 
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			wantErr: errors.New(`failed to parse schema "my-schema-123": avro: unknown type: not-schema`),
 		},
 		{
 			name:     "fail to unmarshal",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
@@ -123,7 +123,7 @@ func Test_SchemaUnmarshal(t *testing.T) {
 					SchemaJson: testSchema,
 				}, nil)
 
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			data:    []byte("foobar"),
 			wantErr: errors.New(`failed to unmarshal with schema "my-schema-123": map[string]interface {}: avro: ReadString: invalid string length`),
@@ -134,7 +134,7 @@ func Test_SchemaUnmarshal(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			data, err := tc.schema(t).Unmarshal(ctx, tc.schemaID, tc.data)
+			data, err := tc.schemaClient(t).Unmarshal(ctx, tc.schemaID, tc.data)
 			if tc.wantErr != nil {
 				is.True(err != nil)
 				is.Equal(err.Error(), tc.wantErr.Error())
@@ -152,7 +152,7 @@ func Test_SchemaMarshal(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		schema   func(t *testing.T) *Schema
+		schemaClient   func(t *testing.T) *SchemaClient
 		schemaID string
 		data     map[string]any
 		expected []byte
@@ -161,7 +161,7 @@ func Test_SchemaMarshal(t *testing.T) {
 		{
 			name:     "marshal success",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
@@ -172,7 +172,7 @@ func Test_SchemaMarshal(t *testing.T) {
 					SchemaJson: testSchema,
 				}, nil)
 
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			data:     decoded,
 			expected: encoded,
@@ -180,14 +180,14 @@ func Test_SchemaMarshal(t *testing.T) {
 		{
 			name:     "fail to get schema",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
 				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(nil, errors.New("boom"))
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			wantErr: errors.New(`failed to retrieve schema "my-schema-123": boom`),
 		},
@@ -195,7 +195,7 @@ func Test_SchemaMarshal(t *testing.T) {
 		{
 			name:     "fail to marshal",
 			schemaID: "my-schema-123",
-			schema: func(t *testing.T) *Schema {
+			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
 				c := newMockPubSubClient(t)
@@ -206,7 +206,7 @@ func Test_SchemaMarshal(t *testing.T) {
 					SchemaJson: testSchema,
 				}, nil)
 
-				return newSchema(c)
+				return newSchemaClient(c)
 			},
 			data:    map[string]any{"foo": "bar"},
 			wantErr: errors.New(`failed to marshal with schema "my-schema-123": avro: missing required field CreatedDate`),
@@ -217,7 +217,7 @@ func Test_SchemaMarshal(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			is := is.New(t)
 
-			v, err := tc.schema(t).Marshal(ctx, tc.schemaID, tc.data)
+			v, err := tc.schemaClient(t).Marshal(ctx, tc.schemaID, tc.data)
 			if tc.wantErr != nil {
 				is.True(err != nil)
 				is.Equal(err.Error(), tc.wantErr.Error())
