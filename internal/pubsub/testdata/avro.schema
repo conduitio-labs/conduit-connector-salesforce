@@ -1,0 +1,35 @@
+{
+  "type": "record",
+  "name": "Case__e",
+  "namespace": "com.sforce.eventbus",
+  "fields": [
+    {
+      "name": "CreatedDate",
+      "type": "long",
+      "doc": "CreatedDate:DateTime"
+    },
+    {
+      "name": "CreatedById",
+      "type": "string",
+      "doc": "CreatedBy:EntityId"
+    },
+    {
+      "name": "Case_Status__c",
+      "type": [
+        "null",
+        "string"
+      ],
+      "doc": "Data:Text:00Naj00000555Lz",
+      "default": null
+    },
+    {
+      "name": "RandomNumber__c",
+      "type": [
+        "null",
+        "double"
+      ],
+      "doc": "Data:Double:00Naj00000OTQnh",
+      "default": null
+    }
+  ]
+}

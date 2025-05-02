@@ -23,6 +23,7 @@ import (
 	"github.com/hamba/avro"
 )
 
+// Schema manages schema retrieval from pubsub api. Schemas are cached based on their unique schemaID.
 type Schema struct {
 	mu    sync.Mutex
 	c     eventbusv1.PubSubClient
@@ -37,10 +38,15 @@ func newSchema(c eventbusv1.PubSubClient) *Schema {
 	}
 }
 
+// Unmarshal decodes the payload into a map, using the schema associated with the provided schemaID.
+// On success, it returns a map containing the unmarshaled data.
+// Returns error when:
+// * Schema cannot be found.
+// * Data cannot be unmarshalled.
 func (s *Schema) Unmarshal(ctx context.Context, schemaID string, v []byte) (map[string]any, error) {
 	schema, err := s.schema(ctx, schemaID)
 	if err != nil {
-		return nil, errors.Errorf("failed to retrieve schema %q: %w", schemaID, err)
+		return nil, err
 	}
 
 	data := make(map[string]any)
@@ -51,10 +57,15 @@ func (s *Schema) Unmarshal(ctx context.Context, schemaID string, v []byte) (map[
 	return data, nil
 }
 
+// Marshal encodes the provided map into avro payload. Returns the slice of bytes containing the
+// avro-encoded data.
+// Returns error when:
+// * Schema cannot be found.
+// * Data cannot be marshaled.
 func (s *Schema) Marshal(ctx context.Context, schemaID string, data map[string]any) ([]byte, error) {
 	schema, err := s.schema(ctx, schemaID)
 	if err != nil {
-		return nil, errors.Errorf("failed to retrieve schema %q: %w", schemaID, err)
+		return nil, err
 	}
 
 	v, err := avro.Marshal(schema, data)
@@ -65,11 +76,15 @@ func (s *Schema) Marshal(ctx context.Context, schemaID string, data map[string]a
 	return v, nil
 }
 
+// schema returns ready to use avro.Scheme associated to schemaID, either from cache or from pubsub.
+// Returns error when:
+// * Failed to retrieve schema from pubsub.
+// * Fails to parse the schema JSON.
 func (s *Schema) schema(ctx context.Context, schemaID string) (avro.Schema, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s, ok := s.cache[schemaID]; ok {
+	if s, ok := s.cache[schemaID]; ok && s != nil {
 		return s, nil
 	}
 
