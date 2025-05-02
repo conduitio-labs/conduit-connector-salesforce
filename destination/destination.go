@@ -48,7 +48,7 @@ func NewDestination() sdk.Destination {
 }
 
 func (d *Destination) Open(ctx context.Context) error {
-	client, err := pubsub.NewGRPCClient(ctx, d.config.Config, "publish")
+	client, err := pubsub.NewGRPCClient(d.config.Config, "publish")
 	if err != nil {
 		return errors.Errorf("could not create GRPCClient: %w", err)
 	}

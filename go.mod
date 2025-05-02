@@ -6,7 +6,7 @@ require (
 	github.com/conduitio/conduit-commons v0.5.2
 	github.com/conduitio/conduit-connector-sdk v0.13.3
 	github.com/go-errors/errors v1.5.1
-	github.com/linkedin/goavro/v2 v2.13.1
+	github.com/hamba/avro v1.8.0
 	github.com/stretchr/testify v1.10.0
 	google.golang.org/grpc v1.72.0
 	google.golang.org/protobuf v1.36.6
@@ -110,7 +110,6 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/golang/snappy v0.0.4 // indirect
 	github.com/golangci/dupl v0.0.0-20250308024227-f665c8d69b32 // indirect
 	github.com/golangci/gofmt v0.0.0-20250106114630-d62b90e6713d // indirect
 	github.com/golangci/misspell v0.6.0 // indirect
