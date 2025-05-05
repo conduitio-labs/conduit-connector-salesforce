@@ -20,6 +20,7 @@ import (
 	"time"
 
 	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1"
+	"github.com/conduitio/conduit-commons/opencdc"
 	mock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +45,7 @@ func TestPubSubClient_Initialize(t *testing.T) {
 	c := &Client{
 		oauth:         mockAuth,
 		pubSubClient:  mockPubSubClient,
-		buffer:        make(chan ConnectResponseEvent),
+		records:       make(chan opencdc.Record),
 		topicNames:    []string{"my-topic"},
 		fetchInterval: time.Second * 1,
 	}

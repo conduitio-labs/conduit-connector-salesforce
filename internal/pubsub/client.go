@@ -62,7 +62,7 @@ type Client struct {
 	pubSubClient eventbusv1.PubSubClient
 	schema       *SchemaClient
 
-	buffer chan ConnectResponseEvent
+	records chan opencdc.Record
 
 	stop          func()
 	tomb          *tomb.Tomb
@@ -111,7 +111,7 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 		schema:       newSchemaClient(c),
 		conn:         conn,
 		pubSubClient: c,
-		buffer:       make(chan ConnectResponseEvent),
+		records:      make(chan opencdc.Record),
 		oauth:        oauth,
 		maxRetries:   config.RetryCount,
 		pubSubAction: pubSubAction(action),
@@ -169,7 +169,7 @@ func (c *Client) StartCDC(ctx context.Context, replay string, currentPos positio
 		<-c.tomb.Dead()
 
 		sdk.Logger(ctx).Info().Err(c.tomb.Err()).Msg("tomb died, closing buffer")
-		close(c.buffer)
+		close(c.records)
 	}()
 
 	return nil
@@ -180,14 +180,14 @@ func (c *Client) Next(ctx context.Context) (opencdc.Record, error) {
 	select {
 	case <-ctx.Done():
 		return opencdc.Record{}, errors.Errorf("next: context done: %w", ctx.Err())
-	case event, ok := <-c.buffer:
+	case r, ok := <-c.records:
 		if !ok {
 			if err := c.tomb.Err(); err != nil {
 				return opencdc.Record{}, errors.Errorf("tomb exited: %w", err)
 			}
 			return opencdc.Record{}, ErrEndOfRecords
 		}
-		return c.buildRecord(event)
+		return r, nil
 	}
 }
 
@@ -405,7 +405,7 @@ func (c *Client) Subscribe(
 	return subscribeClient, nil
 }
 
-func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]ConnectResponseEvent, error) {
+func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]*eventbusv1.ConsumerEvent, error) {
 	var (
 		preset = c.replayPreset
 		start  = time.Now().UTC()
@@ -463,45 +463,7 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]Con
 		return nil, err
 	}
 
-	// Empty response
-	if len(resp.Events) == 0 {
-		return []ConnectResponseEvent{}, nil
-	}
-
-	logger.Info().
-		Str("preset", preset.String()).
-		Str("replay_id", base64.StdEncoding.EncodeToString(replayID)).
-		Str("topic", topic).
-		Int("events", len(resp.Events)).
-		Int32("pending_events", resp.PendingNumRequested).
-		Dur("elapsed", time.Since(start)).
-		Msg("subscriber received events")
-
-	var events []ConnectResponseEvent
-
-	for _, e := range resp.Events {
-		logger.Debug().
-			Str("schema_id", e.Event.SchemaId).
-			Str("event_id", e.Event.Id).
-			Msg("decoding event")
-
-		data, err := c.schema.Unmarshal(ctx, e.Event.SchemaId, e.Event.Payload)
-		if err != nil {
-			return events, errors.Errorf("failed to unmarshal data: %w", err)
-		}
-
-		logger.Trace().Fields(data).Msg("decoded event")
-
-		events = append(events, ConnectResponseEvent{
-			ReplayID:   e.ReplayId,
-			EventID:    e.Event.Id,
-			Data:       data,
-			Topic:      topic,
-			ReceivedAt: time.Now(),
-		})
-	}
-
-	return events, nil
+	return resp.Events, nil
 }
 
 func (c *Client) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
@@ -603,54 +565,63 @@ func (c *Client) startCDC(ctx context.Context, topic Topic) error {
 				return errors.Errorf("error recv events: %w", err)
 			}
 
-			if len(events) == 0 {
-				continue
-			}
-
 			sdk.Logger(ctx).Debug().
 				Int("events", len(events)).
 				Dur("elapsed", time.Since(lastRecvdAt)).
 				Str("topic", topic.topicName).
 				Msg("received events")
 
-			for _, e := range events {
-				topic.replayID = e.ReplayID
-				c.buffer <- e
+			if len(events) == 0 {
+				continue
+			}
+
+			for i, e := range events {
+				r, err := c.buildRecord(ctx, topic.topicName, e)
+				if err != nil {
+					return errors.Errorf("failed to build record: %w", err)
+				}
+				topic.replayID = e.ReplayId
+				c.records <- r
+
 				sdk.Logger(ctx).Debug().
 					Int("events", len(events)).
+					Int("count", i).
 					Dur("elapsed", time.Since(lastRecvdAt)).
-					Str("topic", e.Topic).
-					Str("replayID", base64.StdEncoding.EncodeToString(e.ReplayID)).
+					Str("topic", topic.topicName).
+					Str("replayID", base64.StdEncoding.EncodeToString(e.ReplayId)).
 					Msg("record sent to buffer")
 			}
 		}
 	}
 }
 
-func (c *Client) buildRecord(event ConnectResponseEvent) (opencdc.Record, error) {
-	// TODO - ADD something here to distinguish creates, deletes, updates.
-	err := c.currentPos.SetTopicReplayID(event.Topic, event.ReplayID)
-	if err != nil {
-		return opencdc.Record{}, errors.Errorf("err setting replay id %s on an event for topic %s : %w", event.ReplayID, event.Topic, err)
+func (c *Client) buildRecord(ctx context.Context, topic string, e *eventbusv1.ConsumerEvent) (opencdc.Record, error) {
+	if err := c.currentPos.SetTopicReplayID(topic, e.ReplayId); err != nil {
+		return opencdc.Record{}, errors.Errorf("failed to set topic %q replay id: %w", topic, err)
 	}
 
 	sdk.Logger(context.Background()).Debug().
-		Dur("elapsed", time.Since(event.ReceivedAt)).
-		Str("topic", event.Topic).
-		Str("replayID", base64.StdEncoding.EncodeToString(event.ReplayID)).
-		Str("replayID uncoded", string(event.ReplayID)).
+		Str("topic", topic).
+		Str("replayID", base64.StdEncoding.EncodeToString(e.ReplayId)).
 		Msg("built record, sending it as next")
+
+	data, err := c.schema.Unmarshal(ctx, e.Event.SchemaId, e.Event.Payload)
+	if err != nil {
+		return opencdc.Record{}, errors.Errorf("failed to unmarshal data: %w", err)
+	}
+
+	key := opencdc.StructuredData{
+		"replayId": e.ReplayId,
+		"id":       e.Event.Id,
+	}
+	meta := opencdc.Metadata{}
+	meta.SetCollection(topic)
 
 	return sdk.Util.Source.NewRecordCreate(
 		c.currentPos.ToSDKPosition(),
-		opencdc.Metadata{
-			"opencdc.collection": event.Topic,
-		},
-		opencdc.StructuredData{
-			"replayId": event.ReplayID,
-			"id":       event.EventID,
-		},
-		opencdc.StructuredData(event.Data),
+		meta,
+		key,
+		opencdc.StructuredData(data),
 	), nil
 }
 
