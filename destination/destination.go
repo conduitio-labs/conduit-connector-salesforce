@@ -26,8 +26,7 @@ import (
 var _ client = (*pubsub.Client)(nil)
 
 type client interface {
-	Stop(context.Context)
-	Close(context.Context) error
+	Teardown(context.Context) error
 	Write(context.Context, opencdc.Record) error
 	Initialize(context.Context, []string) error
 }
@@ -78,14 +77,8 @@ func (d *Destination) Write(ctx context.Context, rr []opencdc.Record) (int, erro
 }
 
 func (d *Destination) Teardown(ctx context.Context) error {
-	if d.client == nil {
-		return nil
-	}
-
-	d.client.Stop(ctx)
-
-	if err := d.client.Close(ctx); err != nil {
-		return errors.Errorf("error when closing subscriber conn: %w", err)
+	if d.client != nil {
+		return d.client.Teardown(ctx)
 	}
 
 	return nil
