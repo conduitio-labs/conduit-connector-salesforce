@@ -199,9 +199,10 @@ func (a *oauth) apiErr(r io.Reader) error {
 
 // Context returns new gRPC metadata context containing authentication data.
 func (a *oauth) Context(ctx context.Context) context.Context {
-	if a.authdata == nil {
-		panic("need to authorize first")
-	}
+	// simulate auth failure
+	//if a.authdata == nil {
+	//	panic("need to authorize first")
+	//}
 
 	a.rw.RLock()
 	defer a.rw.RUnlock()

@@ -92,20 +92,18 @@ type pubSubAction string
 
 // Creates a new connection to the gRPC server and returns the wrapper struct.
 func NewGRPCClient(config config.Config, action string) (*Client, error) {
-	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(transportCredentials(config.InsecureSkipVerify)),
-	}
-
-	conn, err := grpc.NewClient(config.PubsubAddress, dialOpts...)
-	if err != nil {
-		return nil, errors.Errorf("gRPC dial: %w", err)
-	}
-	c := eventbusv1.NewPubSubClient(conn)
-
 	oauth, err := newAuthorizer(config.ClientID, config.ClientSecret, config.OAuthEndpoint)
 	if err != nil {
 		return nil, errors.Errorf("failed to initialize auth: %w", err)
 	}
+
+	dialer := newDialer(config, oauth)
+
+	conn, err := grpc.NewClient(config.PubsubAddress, dialer.DialOpts()...)
+	if err != nil {
+		return nil, errors.Errorf("gRPC dial: %w", err)
+	}
+	c := eventbusv1.NewPubSubClient(conn)
 
 	return &Client{
 		schema:       newSchemaClient(c),
@@ -122,9 +120,9 @@ func NewGRPCClient(config config.Config, action string) (*Client, error) {
 func (c *Client) Initialize(ctx context.Context, topics []string) error {
 	c.topicNames = topics
 
-	if err := c.oauth.Authorize(ctx); err != nil {
-		return err
-	}
+	//if err := c.oauth.Authorize(ctx); err != nil {
+	//	return err
+	//}
 
 	if err := c.canAccessTopic(ctx); err != nil {
 		return err
@@ -467,28 +465,30 @@ func (c *Client) Recv(ctx context.Context, topic string, replayID []byte) ([]*ev
 }
 
 func (c *Client) retryAuth(ctx context.Context, retry bool, topic Topic) (bool, Topic, error) {
-	var err error
-	sdk.Logger(ctx).Info().Msgf("retry connection on topic %s - retries remaining %d ", topic.topicName, topic.retryCount)
-	topic.retryCount--
+	/*	var err error
+		sdk.Logger(ctx).Info().Msgf("retry connection on topic %s - retries remaining %d ", topic.topicName, topic.retryCount)
+		topic.retryCount--
 
-	if err = c.oauth.Authorize(ctx); err != nil && topic.retryCount <= 0 {
-		return retry, topic, errors.Errorf("failed to refresh auth: %w", err)
-	} else if err != nil {
-		sdk.Logger(ctx).Info().Msgf("received error on login for topic %s - retry - %d : %v ", topic.topicName, topic.retryCount, err)
-		retry = true
-		return retry, topic, errors.Errorf("received error on login for topic %s - retry - %d : %w", topic.topicName, topic.retryCount, err)
-	}
+		if err = c.oauth.Authorize(ctx); err != nil && topic.retryCount <= 0 {
+			return retry, topic, errors.Errorf("failed to refresh auth: %w", err)
+		} else if err != nil {
+			sdk.Logger(ctx).Info().Msgf("received error on login for topic %s - retry - %d : %v ", topic.topicName, topic.retryCount, err)
+			retry = true
+			return retry, topic, errors.Errorf("received error on login for topic %s - retry - %d : %w", topic.topicName, topic.retryCount, err)
+		}
 
-	if err := c.canAccessTopic(ctx); err != nil && topic.retryCount <= 0 {
-		return retry, topic, errors.Errorf("failed to access  client topic %s: %w", topic.topicName, err)
-	} else if err != nil {
-		sdk.Logger(ctx).Info().Msgf("received error on access for topic %s - retry - %d : %v", topic.topicName, topic.retryCount, err)
-		retry = true
-		return retry, topic, errors.Errorf("received error on access for topic %s - retry - %d : %s ", topic.topicName, topic.retryCount, err)
-	}
+		if err := c.canAccessTopic(ctx); err != nil && topic.retryCount <= 0 {
+			return retry, topic, errors.Errorf("failed to access  client topic %s: %w", topic.topicName, err)
+		} else if err != nil {
+			sdk.Logger(ctx).Info().Msgf("received error on access for topic %s - retry - %d : %v", topic.topicName, topic.retryCount, err)
+			retry = true
+			return retry, topic, errors.Errorf("received error on access for topic %s - retry - %d : %s ", topic.topicName, topic.retryCount, err)
+		}
 
-	retry = false
-	return retry, topic, nil
+		retry = false
+		return retry, topic, nil
+	*/
+	return true, topic, nil
 }
 
 func (c *Client) startCDC(ctx context.Context, topic Topic) error {
