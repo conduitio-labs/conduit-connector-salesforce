@@ -167,16 +167,15 @@ func (s *Subscriber) sendRecv(ctx context.Context, n int32) error {
 				return errors.Errorf("failed to build record: %w", err)
 			}
 			s.events <- e
+			total++
 		}
-
-		total += len(resp.Events)
-
-		logger.Debug().Int32("pending", pending).Int("total", total).Hex("replay_id", resp.LatestReplayId).
-			Msg("saving position")
 
 		s.lastReplayID = resp.LatestReplayId
 		lastReplayID = resp.LatestReplayId
 		pending = resp.PendingNumRequested
+
+		logger.Debug().Int32("pending", pending).Int("total", total).Hex("replay_id", resp.LatestReplayId).
+			Msg("saving position")
 	}
 
 	return nil
