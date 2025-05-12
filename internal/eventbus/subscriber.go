@@ -24,13 +24,15 @@ import (
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const (
-	defaultFetchSize = int32(10)
+	defaultFetchSize int32 = 10
+	defaultPrefetch  int32 = int32(float32(0.1) * float32(defaultFetchSize))
 )
 
 var errInvalidPositionChange = errors.Errorf("replay id modified")
@@ -81,14 +83,20 @@ func NewSubscriber(ctx context.Context, c *Client, ch chan *EventData, config To
 	}, nil
 }
 
+// Run starts the processing loop of the subscriber.
+// Unauthenticated and invalid replay ID errors will be recovered by
+// re-authorizing and recreating the subscriber stream.
+// Any other errors will cause the subscriber to exit with an error.
 func (s *Subscriber) Run(ctx context.Context) error {
 	s.logger.Info().Hex("replay_id", s.lastReplayID).Msg("starting subscriber")
 
+	// N.B. This is the recovery loop. When the processing go-routine exits
+	//      with errors, there will be an attempt to recover the subscriber.
 	for {
 		errChan := make(chan error)
 
 		go func() {
-			if err := s.sendRecv(ctx, defaultFetchSize); err != nil {
+			if err := s.process(ctx); err != nil {
 				s.logger.Error().Err(err).Msg("sendrecv exited with error")
 				errChan <- err
 			}
@@ -107,40 +115,22 @@ func (s *Subscriber) Run(ctx context.Context) error {
 	}
 }
 
-// sendRecv sends request for `n` number of messages and waits until all events are
-// received or error is encountered.
-// Returns error when:
-// * Send/Recv fails.
-// * Failed to build the event.
-func (s *Subscriber) sendRecv(ctx context.Context, n int32) error {
-	logger := s.logger.With().Str("at", "sub.sendRecv").Int32("fetch_size", n).Logger()
-
-	req := &eventbusv1.FetchRequest{
-		TopicName:    s.topic,
-		ReplayPreset: s.replayPreset,
-		NumRequested: n,
-	}
-
-	if len(s.lastReplayID) != 0 {
-		req.ReplayPreset = eventbusv1.ReplayPreset_CUSTOM
-		req.ReplayId = s.lastReplayID
-	}
-
-	logger.Debug().Hex("replay_id", s.lastReplayID).Msg("sending fetch request")
-
-	if err := s.sub.Send(req); err != nil {
-		if !errors.Is(err, io.EOF) {
-			return errors.Errorf("failure to send fetch request: %w", err)
-		}
-	}
+// process performs send/recv on a client gRPC stream. Received events are unmarshaled
+// and forwarded over the events channel. Requests for new events are made in 'n' chunks.
+// Process will exit with error when:
+// * Contex is done/cancelled.
+// * Send/recv error.
+func (s *Subscriber) process(ctx context.Context) error {
+	logger := s.logger.With().Str("send_id", uuid.NewString()).Str("at", "sub.process").Logger()
 
 	var (
-		pending      = n
-		total        = 0
-		lastReplayID []byte
+		pending = int32(0)
+		total   = 0
 	)
 
-	for pending > 0 {
+	lastReplayID := s.lastReplayID
+
+	for {
 		// short-circut when context is cancelled.
 		select {
 		case <-ctx.Done():
@@ -149,9 +139,32 @@ func (s *Subscriber) sendRecv(ctx context.Context, n int32) error {
 		}
 
 		// N.B. This may never happen, since sendRecv should have
-		//      exited before recovery and reset of the replayID and preset happens.
+		//      exited before recovery when reset of the replayID and preset happens.
 		if len(lastReplayID) > 0 && !bytes.Equal(lastReplayID, s.lastReplayID) {
 			return errInvalidPositionChange
+		}
+
+		// When pending is closing to zero, send request for more events.
+		if pending <= defaultPrefetch {
+			logger.Info().Hex("replay_id", s.lastReplayID).Msg("sending fetch request")
+
+			req := &eventbusv1.FetchRequest{
+				TopicName:    s.topic,
+				ReplayPreset: s.replayPreset,
+				NumRequested: defaultFetchSize,
+			}
+
+			if len(s.lastReplayID) != 0 {
+				req.ReplayPreset = eventbusv1.ReplayPreset_CUSTOM
+				req.ReplayId = s.lastReplayID
+			}
+
+			if err := s.sub.Send(req); err != nil {
+				if !errors.Is(err, io.EOF) {
+					return errors.Errorf("failure to send fetch request: %w", err)
+				}
+				logger.Info().Msg("fetch request EOF, continue to recv")
+			}
 		}
 
 		resp, err := s.sub.Recv()
@@ -166,21 +179,24 @@ func (s *Subscriber) sendRecv(ctx context.Context, n int32) error {
 			if err != nil {
 				return errors.Errorf("failed to build record: %w", err)
 			}
+
 			s.events <- e
+
+			s.lastReplayID = resp.LatestReplayId
+			lastReplayID = resp.LatestReplayId
 			total++
 		}
 
-		s.lastReplayID = resp.LatestReplayId
-		lastReplayID = resp.LatestReplayId
+		// This should contain any extra events requested with prefetch.
 		pending = resp.PendingNumRequested
 
-		logger.Debug().Int32("pending", pending).Int("total", total).Hex("replay_id", resp.LatestReplayId).
-			Msg("saving position")
+		logger.Info().Int32("pending", pending).Int("total", total).Hex("replay_id", resp.LatestReplayId).
+			Msgf("%d processed", len(resp.Events))
 	}
-
-	return nil
 }
 
+// buildEvent unmarshals the consumer event with the attached schema id.
+// Returns error when unmarshaling fails.
 func (s *Subscriber) buildEvent(ctx context.Context, e *eventbusv1.ConsumerEvent) (*EventData, error) {
 	data, err := s.c.Unmarshal(ctx, e.Event.SchemaId, e.Event.Payload)
 	if err != nil {
@@ -195,6 +211,9 @@ func (s *Subscriber) buildEvent(ctx context.Context, e *eventbusv1.ConsumerEvent
 	}, nil
 }
 
+// recoverErr attempts to recover the subscriber from the provided error.
+// Handles only unavailable, unauthenticated and invalid replay id errors.
+// Returns error when recovery fails.
 func (s *Subscriber) recoverErr(ctx context.Context, err error) error {
 	s.logger.Error().Err(err).Msg("recovering error")
 	// return early if there is nothing to recover
@@ -203,7 +222,7 @@ func (s *Subscriber) recoverErr(ctx context.Context, err error) error {
 	}
 
 	switch status.Code(err) {
-	case codes.Unauthenticated:
+	case codes.Unauthenticated, codes.Unavailable:
 		return s.recoverAuth(ctx)
 	case codes.InvalidArgument:
 		return s.recoverInvalidReplay(ctx)
@@ -212,17 +231,23 @@ func (s *Subscriber) recoverErr(ctx context.Context, err error) error {
 	return errors.Errorf("unrecoverable error for subscriber: %w", err)
 }
 
+// recoverInvalidReplay attempts to recover an invalid replay id error
+// by zeroing the cached replay and recreating the stream with fresh auth.
 func (s *Subscriber) recoverInvalidReplay(ctx context.Context) error {
 	s.mu.Lock()
 
 	s.replayPreset = eventbusv1.ReplayPreset_EARLIEST
 	s.lastReplayID = nil
 
+	s.logger.Warn().Msg("invalid replay, resetting to earliest preset")
+
 	s.mu.Unlock()
 
 	return s.recoverAuth(ctx)
 }
 
+// recoverAuth attempts to recover auth errors by re-authorizing and
+// recreating the stream.
 func (s *Subscriber) recoverAuth(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -232,10 +257,14 @@ func (s *Subscriber) recoverAuth(ctx context.Context) error {
 		return errors.Errorf("failed to recover auth: %w", err)
 	}
 
+	s.logger.Info().Msg("re-authorization successful")
+
 	s.sub, err = s.c.Subscribe(authCtx)
 	if err != nil {
 		return errors.Errorf("failed to recover stream with fresh auth: %w", err)
 	}
+
+	s.logger.Info().Msgf("established new stream to %q", s.topic)
 
 	return nil
 }

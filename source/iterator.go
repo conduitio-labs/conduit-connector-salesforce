@@ -83,10 +83,6 @@ func (i *iterator) Next(ctx context.Context) (opencdc.Record, error) {
 	}
 }
 
-func (i *iterator) NextN(_ context.Context, _ int) ([]opencdc.Record, error) {
-	return []opencdc.Record{}, nil
-}
-
 func (i *iterator) Ack(_ context.Context, _ opencdc.Position) error {
 	i.acks.Done()
 	return nil

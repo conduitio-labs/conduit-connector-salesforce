@@ -57,14 +57,20 @@ func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
 
 	s.i = i
 
+	sdk.Logger(ctx).Trace().Msg("source open")
+
 	return nil
 }
 
 func (s *Source) Read(ctx context.Context) (rec opencdc.Record, err error) {
+	sdk.Logger(ctx).Trace().Msg("source read")
+
 	return s.i.Next(ctx)
 }
 
 func (s *Source) Ack(ctx context.Context, pos opencdc.Position) error {
+	sdk.Logger(ctx).Trace().Hex("position", pos).Msg("source ack")
+
 	return s.i.Ack(ctx, pos)
 }
 
@@ -72,6 +78,8 @@ func (s *Source) Teardown(ctx context.Context) error {
 	if s.i != nil {
 		return s.i.Teardown(ctx)
 	}
+
+	sdk.Logger(ctx).Trace().Msg("source teardown")
 
 	return nil
 }
