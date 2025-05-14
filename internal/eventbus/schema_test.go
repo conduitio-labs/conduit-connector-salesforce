@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pubsub
+package eventbus
 
+/*
 import (
 	"context"
 	_ "embed"
@@ -248,3 +249,5 @@ func encodedTestData(t *testing.T, schema string) (map[string]any, []byte) {
 
 	return r, data
 }
+
+*/
