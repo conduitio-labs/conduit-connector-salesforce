@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/conduitio/conduit-commons v0.5.4
-	github.com/conduitio/conduit-connector-sdk v0.13.3
+	github.com/conduitio/conduit-connector-sdk v0.13.4
 	github.com/go-errors/errors v1.5.1
 	github.com/hamba/avro v1.8.0
 	github.com/stretchr/testify v1.10.0
@@ -43,7 +43,6 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/twmb/go-cache v1.2.1 // indirect
 	github.com/uudashr/iface v1.3.1 // indirect
-	go.uber.org/mock v0.5.2 // indirect
 	golang.org/x/net v0.40.0 // indirect
 )
 
