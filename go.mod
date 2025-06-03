@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/conduitio/conduit-commons v0.5.4
-	github.com/conduitio/conduit-connector-sdk v0.13.4
+	github.com/conduitio/conduit-connector-sdk v0.14.0
 	github.com/go-errors/errors v1.5.1
 	github.com/hamba/avro v1.8.0
 	github.com/stretchr/testify v1.10.0
@@ -83,7 +83,7 @@ require (
 	github.com/charithe/durationcheck v0.0.10 // indirect
 	github.com/chavacava/garif v0.1.0 // indirect
 	github.com/ckaznocha/intrange v0.3.0 // indirect
-	github.com/conduitio/conduit-connector-protocol v0.9.2 // indirect
+	github.com/conduitio/conduit-connector-protocol v0.9.4-0.20250522154900-3708d4f3a481 // indirect
 	github.com/curioswitch/go-reassign v0.3.0 // indirect
 	github.com/daixiang0/gci v0.13.6 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
