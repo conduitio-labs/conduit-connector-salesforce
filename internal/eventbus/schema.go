@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pubsub
+package eventbus
 
 import (
 	"context"
@@ -87,6 +87,9 @@ func (s *SchemaClient) schema(ctx context.Context, schemaID string) (avro.Schema
 	if s, ok := s.cache[schemaID]; ok && s != nil {
 		return s, nil
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, grpcTimeout)
+	defer cancel()
 
 	resp, err := s.c.GetSchema(ctx, &eventbusv1.SchemaRequest{
 		SchemaId: schemaID,
