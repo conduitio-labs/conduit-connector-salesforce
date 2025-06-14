@@ -16,31 +16,19 @@ package source
 
 import (
 	"context"
-	"encoding/base64"
-	"time"
 
-	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/internal/pubsub"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/eventbus"
 	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
 )
 
-type client interface {
-	Next(context.Context) (opencdc.Record, error)
-	Initialize(context.Context, []string) error
-	StartCDC(context.Context, string, position.Topics, []string, time.Duration) error
-	Stop(context.Context)
-	Close(context.Context) error
-	Wait(context.Context) error
-}
-
-var _ client = (*pubsub.Client)(nil)
-
 type Source struct {
 	sdk.UnimplementedSource
-	client client
 	config Config
+
+	i *iterator
 }
 
 func (s *Source) Config() sdk.SourceConfig {
@@ -52,109 +40,46 @@ func NewSource() sdk.Source {
 }
 
 func (s *Source) Open(ctx context.Context, sdkPos opencdc.Position) error {
-	logger := sdk.Logger(ctx)
-
-	var parsedPositions position.Topics
-
-	logger.Debug().
-		Str("at", "source.open").
-		Str("position", base64.StdEncoding.EncodeToString(sdkPos)).
-		Strs("topics", s.config.TopicNames).
-		Msg("Open Source Connector")
-
-	parsedPositions, err := position.ParseSDKPosition(sdkPos, "")
+	parsedPosition, err := position.ParseSDKPosition(sdkPos)
 	if err != nil {
 		return errors.Errorf("error parsing sdk position: %w", err)
 	}
 
-	client, err := pubsub.NewGRPCClient(s.config.Config, "subscribe")
+	c, err := eventbus.NewClient(ctx, s.config.Config)
 	if err != nil {
-		return errors.Errorf("could not create GRPCClient: %w", err)
+		return errors.Errorf("failed to create eventbus client: %w", err)
 	}
 
-	if err := client.Initialize(ctx, s.config.TopicNames); err != nil {
-		return errors.Errorf("could not initialize pubsub client: %w", err)
+	i, err := newIterator(ctx, c, parsedPosition, s.config)
+	if err != nil {
+		return errors.Errorf("failed to create subscriber iterator: %w", err)
 	}
 
-	if err := client.StartCDC(ctx, s.config.ReplayPreset, parsedPositions, s.config.TopicNames, s.config.PollingPeriod); err != nil {
-		return errors.Errorf("could not initialize pubsub client: %w", err)
-	}
+	s.i = i
 
-	s.client = client
-
-	for _, t := range s.config.TopicNames {
-		p := parsedPositions.TopicReplayID(t)
-		logger.Debug().
-			Str("at", "source.open").
-			Str("position", string(p)).
-			Str("position encoded", base64.StdEncoding.EncodeToString(p)).
-			Str("topic", t).
-			Msgf("Grpc Client has been set. Will begin read for topic: %s", t)
-	}
+	sdk.Logger(ctx).Trace().Msg("source open")
 
 	return nil
 }
 
 func (s *Source) Read(ctx context.Context) (rec opencdc.Record, err error) {
-	logger := sdk.Logger(ctx)
-	logger.Debug().
-		Strs("topics", s.config.TopicNames).
-		Msg("begin read")
+	sdk.Logger(ctx).Trace().Msg("source read")
 
-	r, err := s.client.Next(ctx)
-	if err != nil {
-		return opencdc.Record{}, errors.Errorf("failed to get next record: %w", err)
-	}
-
-	// filter out empty record payloads
-	if r.Payload.Before == nil && r.Payload.After == nil {
-		logger.Error().
-			Interface("record", r).
-			Msg("backing off, empty record payload detected")
-
-		return opencdc.Record{}, sdk.ErrBackoffRetry
-	}
-
-	topic, err := r.Metadata.GetCollection()
-	if err != nil {
-		return opencdc.Record{}, err
-	}
-
-	logger.Debug().
-		Str("at", "source.read").
-		Str("position encoded", base64.StdEncoding.EncodeToString(r.Position)).
-		Str("position", string(r.Position)).
-		Str("record on topic", topic).
-		Msg("sending record")
-
-	return r, nil
+	return s.i.Next(ctx)
 }
 
 func (s *Source) Ack(ctx context.Context, pos opencdc.Position) error {
-	sdk.Logger(ctx).Debug().
-		Str("at", "source.ack").
-		Str("uncoded position ", string(pos)).
-		Str("position", base64.StdEncoding.EncodeToString(pos)).
-		Msg("received ack")
+	sdk.Logger(ctx).Trace().Hex("position", pos).Msg("source ack")
 
-	return nil
+	return s.i.Ack(ctx, pos)
 }
 
 func (s *Source) Teardown(ctx context.Context) error {
-	if s.client == nil {
-		return nil
+	if s.i != nil {
+		return s.i.Teardown(ctx)
 	}
 
-	s.client.Stop(ctx)
-
-	if err := s.client.Wait(ctx); err != nil {
-		sdk.Logger(ctx).Error().Err(err).
-			Msg("received error while stopping client")
-	}
-
-	if err := s.client.Close(ctx); err != nil {
-		return errors.Errorf("error when closing subscriber conn: %w", err)
-	}
+	sdk.Logger(ctx).Trace().Msg("source teardown")
 
 	return nil
 }
