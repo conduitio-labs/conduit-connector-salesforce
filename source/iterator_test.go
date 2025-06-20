@@ -124,5 +124,5 @@ func TestIterator_Next(t *testing.T) {
 	is.Equal(r.Payload.After, opencdc.StructuredData{"expect": "message"})
 
 	is.NoErr(i.Ack(ctx, opencdc.Position{}))
-	is.NoErr(i.acks.Wait(context.TODO())) // ensure acks are dnoe
+	is.NoErr(i.acks.Wait(context.TODO())) // ensure acks are done
 }
