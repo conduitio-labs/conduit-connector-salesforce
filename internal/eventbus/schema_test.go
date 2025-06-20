@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pubsub
+package eventbus
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/hamba/avro"
 	"github.com/matryer/is"
+	"github.com/stretchr/testify/mock"
 )
 
 //go:embed testdata/avro.schema
@@ -47,8 +48,8 @@ func Test_SchemaUnmarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(&eventbusv1.SchemaInfo{
 					SchemaId:   "my-schema-123",
@@ -67,8 +68,7 @@ func Test_SchemaUnmarshal(t *testing.T) {
 				t.Helper()
 				is := is.New(t)
 
-				c := newMockPubSubClient(t)
-				sch := newSchemaClient(c)
+				sch := newSchemaClient(newMockSchemaDescriber(t))
 				parsed, err := avro.Parse(testSchema)
 				is.NoErr(err)
 				sch.cache["my-schema-123"] = parsed
@@ -83,8 +83,8 @@ func Test_SchemaUnmarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(nil, errors.New("boom"))
 				return newSchemaClient(c)
@@ -97,8 +97,8 @@ func Test_SchemaUnmarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(&eventbusv1.SchemaInfo{
 					SchemaId:   "my-schema-123",
@@ -115,8 +115,8 @@ func Test_SchemaUnmarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(&eventbusv1.SchemaInfo{
 					SchemaId:   "my-schema-123",
@@ -164,8 +164,8 @@ func Test_SchemaMarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(&eventbusv1.SchemaInfo{
 					SchemaId:   "my-schema-123",
@@ -183,8 +183,8 @@ func Test_SchemaMarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(nil, errors.New("boom"))
 				return newSchemaClient(c)
@@ -198,8 +198,8 @@ func Test_SchemaMarshal(t *testing.T) {
 			schemaClient: func(t *testing.T) *SchemaClient {
 				t.Helper()
 
-				c := newMockPubSubClient(t)
-				c.EXPECT().GetSchema(ctx, &eventbusv1.SchemaRequest{
+				c := newMockSchemaDescriber(t)
+				c.EXPECT().GetSchema(mock.Anything, &eventbusv1.SchemaRequest{
 					SchemaId: "my-schema-123",
 				}).Return(&eventbusv1.SchemaInfo{
 					SchemaId:   "my-schema-123",

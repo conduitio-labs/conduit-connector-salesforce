@@ -16,13 +16,13 @@ package position
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/conduitio/conduit-commons/opencdc"
+	"github.com/go-errors/errors"
 )
 
-type Topics struct {
+type Position struct {
 	Topics TopicPositions `json:"topics"`
 }
 
@@ -33,69 +33,38 @@ type TopicPosition struct {
 	ReadTime time.Time `json:"readTime"`
 }
 
-func ParseSDKPosition(sdkPos opencdc.Position, topic string) (Topics, error) {
-	var p Topics
-	p.Topics = make(TopicPositions)
-
+func ParseSDKPosition(sdkPos opencdc.Position) (*Position, error) {
 	if len(sdkPos) == 0 {
-		return p, nil
+		return nil, nil
 	}
 
-	err := json.Unmarshal(sdkPos, &p)
-	if err != nil {
-		if topic == "" {
-			return p, fmt.Errorf("could not parse sdk position %v: %w", sdkPos, err)
-		}
-
-		p.SetTopics([]string{topic})
-		err := p.SetTopicReplayID(topic, sdkPos)
-		return p, err
+	var p Position
+	if err := json.Unmarshal(sdkPos, &p); err != nil {
+		return nil, errors.Errorf("failed to parse topic position: %w", err)
 	}
 
-	return p, err
+	return &p, nil
 }
 
-func NewTopicPosition() Topics {
-	var p Topics
-	p.Topics = make(TopicPositions)
-	return p
+func New(topics []string) *Position {
+	m := make(TopicPositions)
+
+	for _, topic := range topics {
+		m[topic] = TopicPosition{}
+	}
+
+	return &Position{Topics: m}
 }
 
-func (p Topics) SetTopics(topics []string) {
+func (p *Position) WithTopics(topics []string) {
 	for _, topic := range topics {
 		if _, ok := p.Topics[topic]; !ok {
-			p.Topics[topic] = TopicPosition{
-				ReplayID: nil,
-			}
+			p.Topics[topic] = TopicPosition{}
 		}
 	}
 }
 
-func (p Topics) TopicReplayID(topic string) []byte {
-	if p.Topics != nil {
-		if _, ok := p.Topics[topic]; ok {
-			return p.Topics[topic].ReplayID
-		}
-	}
-	return nil
-}
-
-func (p Topics) SetTopicReplayID(topic string, replayID []byte) error {
-	if p.Topics != nil {
-		if _, ok := p.Topics[topic]; ok {
-			p.Topics[topic] = TopicPosition{
-				ReplayID: replayID,
-				ReadTime: time.Now(),
-			}
-		} else {
-			// should never be even reaching this point, something went wrong if we do
-			return fmt.Errorf("attempting to set replay id - %b on topic %s, topic doesn't exist on position", replayID, topic)
-		}
-	}
-	return nil
-}
-
-func (p Topics) ToSDKPosition() opencdc.Position {
+func (p *Position) ToSDKPosition() opencdc.Position {
 	v, err := json.Marshal(p)
 	if err != nil {
 		panic(err)
