@@ -26,52 +26,6 @@ func (_m *mockClient) EXPECT() *mockClient_Expecter {
 	return &mockClient_Expecter{mock: &_m.Mock}
 }
 
-// Close provides a mock function with given fields: _a0
-func (_m *mockClient) Close(_a0 context.Context) error {
-	ret := _m.Called(_a0)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Close")
-	}
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
-		r0 = rf(_a0)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// mockClient_Close_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Close'
-type mockClient_Close_Call struct {
-	*mock.Call
-}
-
-// Close is a helper method to define mock.On call
-//   - _a0 context.Context
-func (_e *mockClient_Expecter) Close(_a0 interface{}) *mockClient_Close_Call {
-	return &mockClient_Close_Call{Call: _e.mock.On("Close", _a0)}
-}
-
-func (_c *mockClient_Close_Call) Run(run func(_a0 context.Context)) *mockClient_Close_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
-	})
-	return _c
-}
-
-func (_c *mockClient_Close_Call) Return(_a0 error) *mockClient_Close_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *mockClient_Close_Call) RunAndReturn(run func(context.Context) error) *mockClient_Close_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Initialize provides a mock function with given fields: _a0, _a1
 func (_m *mockClient) Initialize(_a0 context.Context, _a1 []string) error {
 	ret := _m.Called(_a0, _a1)
@@ -225,45 +179,12 @@ func (_c *mockClient_StartCDC_Call) RunAndReturn(run func(context.Context, strin
 	return _c
 }
 
-// Stop provides a mock function with given fields: _a0
-func (_m *mockClient) Stop(_a0 context.Context) {
-	_m.Called(_a0)
-}
-
-// mockClient_Stop_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stop'
-type mockClient_Stop_Call struct {
-	*mock.Call
-}
-
-// Stop is a helper method to define mock.On call
-//   - _a0 context.Context
-func (_e *mockClient_Expecter) Stop(_a0 interface{}) *mockClient_Stop_Call {
-	return &mockClient_Stop_Call{Call: _e.mock.On("Stop", _a0)}
-}
-
-func (_c *mockClient_Stop_Call) Run(run func(_a0 context.Context)) *mockClient_Stop_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
-	})
-	return _c
-}
-
-func (_c *mockClient_Stop_Call) Return() *mockClient_Stop_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *mockClient_Stop_Call) RunAndReturn(run func(context.Context)) *mockClient_Stop_Call {
-	_c.Run(run)
-	return _c
-}
-
-// Wait provides a mock function with given fields: _a0
-func (_m *mockClient) Wait(_a0 context.Context) error {
+// Teardown provides a mock function with given fields: _a0
+func (_m *mockClient) Teardown(_a0 context.Context) error {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Wait")
+		panic("no return value specified for Teardown")
 	}
 
 	var r0 error
@@ -276,30 +197,30 @@ func (_m *mockClient) Wait(_a0 context.Context) error {
 	return r0
 }
 
-// mockClient_Wait_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Wait'
-type mockClient_Wait_Call struct {
+// mockClient_Teardown_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Teardown'
+type mockClient_Teardown_Call struct {
 	*mock.Call
 }
 
-// Wait is a helper method to define mock.On call
+// Teardown is a helper method to define mock.On call
 //   - _a0 context.Context
-func (_e *mockClient_Expecter) Wait(_a0 interface{}) *mockClient_Wait_Call {
-	return &mockClient_Wait_Call{Call: _e.mock.On("Wait", _a0)}
+func (_e *mockClient_Expecter) Teardown(_a0 interface{}) *mockClient_Teardown_Call {
+	return &mockClient_Teardown_Call{Call: _e.mock.On("Teardown", _a0)}
 }
 
-func (_c *mockClient_Wait_Call) Run(run func(_a0 context.Context)) *mockClient_Wait_Call {
+func (_c *mockClient_Teardown_Call) Run(run func(_a0 context.Context)) *mockClient_Teardown_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context))
 	})
 	return _c
 }
 
-func (_c *mockClient_Wait_Call) Return(_a0 error) *mockClient_Wait_Call {
+func (_c *mockClient_Teardown_Call) Return(_a0 error) *mockClient_Teardown_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *mockClient_Wait_Call) RunAndReturn(run func(context.Context) error) *mockClient_Wait_Call {
+func (_c *mockClient_Teardown_Call) RunAndReturn(run func(context.Context) error) *mockClient_Teardown_Call {
 	_c.Call.Return(run)
 	return _c
 }
