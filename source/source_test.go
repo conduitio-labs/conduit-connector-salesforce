@@ -14,29 +14,32 @@
 
 package source
 
-/*
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	config "github.com/conduitio-labs/conduit-connector-salesforce/config"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/eventbus"
+	"github.com/conduitio-labs/conduit-connector-salesforce/source/position"
 	opencdc "github.com/conduitio/conduit-commons/opencdc"
-	sdk "github.com/conduitio/conduit-connector-sdk"
-	mock "github.com/stretchr/testify/mock"
+	"github.com/matryer/is"
 	"github.com/stretchr/testify/require"
 )
 
 func Test_Read(t *testing.T) {
-	testRecord := opencdc.Record{
-		Position:  []byte("test1"),
+	is := is.New(t)
+
+	expectedRecord := opencdc.Record{
+		Position:  []byte(`topics`),
 		Operation: opencdc.OperationCreate,
 		Metadata: opencdc.Metadata{
-			"test1":              "test",
 			"opencdc.collection": "test",
 		},
 		Key: opencdc.StructuredData{
-			"test1": "test",
+			"id":       "event-1",
+			"replayId": []byte(`replay-id`),
 		},
 		Payload: opencdc.Change{
 			After: opencdc.StructuredData{
@@ -44,6 +47,7 @@ func Test_Read(t *testing.T) {
 			},
 		},
 	}
+
 	config := config.Config{
 		ClientID:      "test-client-id",
 		ClientSecret:  "test-client-secret",
@@ -58,62 +62,52 @@ func Test_Read(t *testing.T) {
 	testCases := []struct {
 		desc           string
 		config         Config
-		mockClient     func() *mockClient
+		context        func() context.Context
+		iterator       func() *iterator
 		expectedRecord opencdc.Record
 		expectedErr    error
 	}{
 		{
-			desc:   "success - receive event",
+			desc:   "successful iteration",
 			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("Next", mock.Anything).Return(testRecord, nil)
+			iterator: func() *iterator {
+				testEvent := &eventbus.EventData{
+					Topic:    "test",
+					Data:     map[string]interface{}{"test1": "test"},
+					ID:       "event-1",
+					ReplayID: []byte(`replay-id`),
+				}
+				return newTestIterator([]*eventbus.EventData{testEvent})
+			},
+			expectedRecord: expectedRecord,
+		},
+		{
+			desc:   "error on iterator stopped",
+			config: testConfig,
+			iterator: func() *iterator {
+				iterator := &iterator{
+					events:       make(chan *eventbus.EventData),
+					lastPosition: position.New([]string{"topic1"}),
+				}
 
-				return m
+				return iterator
 			},
-			expectedRecord: testRecord,
-		},
-		{
-			desc:   "success - no event, backoff",
-			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("Next", mock.Anything).Return(opencdc.Record{}, nil).Times(1)
-				return m
-			},
-			expectedErr: sdk.ErrBackoffRetry,
-		},
-
-		{
-			desc:   "error - failed on Next",
-			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("Next", mock.Anything).Return(opencdc.Record{}, errors.New("error receiving new events - test error")).Times(1)
-				return m
-			},
-			expectedErr: errors.New("error receiving new events - test error"),
-		},
-		{
-			desc:   "error - record with empty payload",
-			config: testConfig,
-			mockClient: func() *mockClient {
-				m := newMockClient(t)
-				m.On("Next", mock.Anything).Return(opencdc.Record{Payload: opencdc.Change{Before: nil, After: nil}}, nil).Times(1)
-				return m
-			},
-			expectedErr: sdk.ErrBackoffRetry,
+			expectedErr: errors.New("iterator stopped: context canceled"),
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			ctx := context.Background()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			s := Source{
 				config: tc.config,
 			}
-			if tc.mockClient != nil {
-				s.client = tc.mockClient()
+			if tc.iterator != nil {
+				s.i = tc.iterator()
+			}
+			if tc.expectedErr != nil {
+				cancel()
 			}
 
 			r, err := s.Read(ctx)
@@ -121,10 +115,31 @@ func Test_Read(t *testing.T) {
 				require.Error(t, err)
 				require.ErrorContains(t, err, tc.expectedErr.Error())
 			} else {
+				cancel()
 				require.NoError(t, err)
-				require.Equal(t, tc.expectedRecord, r)
+				is.True(strings.Contains(
+					string(r.Position),
+					`{"topics":{"test":{"replayID":"cmVwbGF5LWlk",`),
+				) // skip matching the read time
+				is.True(r.Payload.Before == nil)
+				is.True(r.Payload.After != nil)
+				is.Equal(r.Metadata["opencdc.collection"], tc.expectedRecord.Metadata["opencdc.collection"])
+				is.Equal(r.Payload.After, tc.expectedRecord.Payload.After)
 			}
 		})
 	}
 }
-*/
+
+func newTestIterator(events []*eventbus.EventData) *iterator {
+	i := &iterator{
+		events:       make(chan *eventbus.EventData, len(events)),
+		lastPosition: position.New([]string{"topic1"}),
+	}
+
+	for _, e := range events {
+		i.events <- e
+	}
+	close(i.events)
+
+	return i
+}
