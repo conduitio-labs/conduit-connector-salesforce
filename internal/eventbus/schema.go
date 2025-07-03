@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package pubsub
+package eventbus
 
 import (
 	"context"
@@ -21,16 +21,21 @@ import (
 	eventbusv1 "github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1"
 	"github.com/go-errors/errors"
 	"github.com/hamba/avro"
+	"google.golang.org/grpc"
 )
+
+type schemaDescriber interface {
+	GetSchema(context.Context, *eventbusv1.SchemaRequest, ...grpc.CallOption) (*eventbusv1.SchemaInfo, error)
+}
 
 // SchemaClient manages schema retrieval from pubsub api. Schemas are cached based on their unique schemaID.
 type SchemaClient struct {
 	mu    sync.Mutex
-	c     eventbusv1.PubSubClient
+	c     schemaDescriber
 	cache map[string]avro.Schema
 }
 
-func newSchemaClient(c eventbusv1.PubSubClient) *SchemaClient {
+func newSchemaClient(c schemaDescriber) *SchemaClient {
 	return &SchemaClient{
 		c:     c,
 		cache: make(map[string]avro.Schema),
@@ -87,6 +92,9 @@ func (s *SchemaClient) schema(ctx context.Context, schemaID string) (avro.Schema
 	if s, ok := s.cache[schemaID]; ok && s != nil {
 		return s, nil
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, grpcTimeout)
+	defer cancel()
 
 	resp, err := s.c.GetSchema(ctx, &eventbusv1.SchemaRequest{
 		SchemaId: schemaID,

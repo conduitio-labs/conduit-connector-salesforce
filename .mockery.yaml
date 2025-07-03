@@ -10,19 +10,27 @@ log-level: "error"
 resolve-type-alias: False
 issue-845-fix: True
 packages:
+  github.com/conduitio-labs/conduit-connector-salesforce/internal/eventbus:
+    interfaces:
+      schemaDescriber: null
+      authorizer: null
+      schemaClient: null
+      Client: null
+  github.com/conduitio-labs/conduit-connector-salesforce/source:
+    interfaces:
+      eventbusClient:
   github.com/conduitio-labs/conduit-connector-salesforce/internal/proto/eventbus/v1:
     interfaces:
       PubSubClient:
         config:
-          dir: internal/pubsub
+          dir: internal/eventbus
           inpackage: false
-          outpkg: pubsub
+          outpkg: eventbus
       PubSub_SubscribeClient:
-        config:
-          dir: internal/pubsub
-          inpackage: false
-          outpkg: pubsub
-  github.com/conduitio-labs/conduit-connector-salesforce/source:
-    interfaces:
-      authenticator: null
-      client: null
+        configs:
+          - dir: internal/eventbus
+            inpackage: false
+            outpkg: eventbus
+          - dir: source
+            inpackage: false
+            outpkg: source

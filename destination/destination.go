@@ -17,26 +17,22 @@ package destination
 import (
 	"context"
 
-	pubsub "github.com/conduitio-labs/conduit-connector-salesforce/internal/pubsub"
+	"github.com/conduitio-labs/conduit-connector-salesforce/internal/eventbus"
 	"github.com/conduitio/conduit-commons/opencdc"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/go-errors/errors"
 )
 
-var _ client = (*pubsub.Client)(nil)
-
-type client interface {
-	Stop(context.Context)
-	Close(context.Context) error
-	Write(context.Context, opencdc.Record) error
-	Initialize(context.Context, []string) error
+type publisherClient interface {
+	Teardown(context.Context) error
+	Publish(context.Context, []opencdc.Record) (int, error)
 }
 
 type Destination struct {
 	sdk.UnimplementedDestination
 
-	client client
-	config Config
+	publisher publisherClient
+	config    Config
 }
 
 func (d *Destination) Config() sdk.DestinationConfig {
@@ -48,44 +44,33 @@ func NewDestination() sdk.Destination {
 }
 
 func (d *Destination) Open(ctx context.Context) error {
-	client, err := pubsub.NewGRPCClient(d.config.Config, "publish")
+	c, err := eventbus.NewClient(ctx, d.config.Config)
 	if err != nil {
-		return errors.Errorf("could not create GRPCClient: %w", err)
+		return errors.Errorf("failed to create eventbus client: %w", err)
 	}
 
-	if err := client.Initialize(ctx, []string{d.config.TopicName}); err != nil {
-		return errors.Errorf("could not initialize pubsub client: %w", err)
+	p, err := eventbus.NewPublisher(ctx, c, d.config.TopicName)
+	if err != nil {
+		return errors.Errorf("failed to create publisher: %w", err)
 	}
 
-	d.client = client
-
-	sdk.Logger(ctx).Debug().
-		Str("at", "destination.open").
-		Str("topic", d.config.TopicName).
-		Msgf("Grpc Client has been set. Will begin read for topic: %s", d.config.TopicName)
+	d.publisher = p
 
 	return nil
 }
 
 func (d *Destination) Write(ctx context.Context, rr []opencdc.Record) (int, error) {
-	for i, r := range rr {
-		if err := d.client.Write(ctx, r); err != nil {
-			return i, errors.Errorf("failed to write records: %w", err)
-		}
+	n, err := d.publisher.Publish(ctx, rr)
+	if err != nil {
+		return n, errors.Errorf("failed to write records: %w", err)
 	}
 
-	return len(rr), nil
+	return n, nil
 }
 
 func (d *Destination) Teardown(ctx context.Context) error {
-	if d.client == nil {
-		return nil
-	}
-
-	d.client.Stop(ctx)
-
-	if err := d.client.Close(ctx); err != nil {
-		return errors.Errorf("error when closing subscriber conn: %w", err)
+	if d.publisher != nil {
+		return d.publisher.Teardown(ctx)
 	}
 
 	return nil
