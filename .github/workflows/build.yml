@@ -1,6 +1,11 @@
 name: build
 
 on:
+  # Pushes made by GITHUB_TOKEN (dependabot auto-merge) do not trigger the
+  # push event, so without a schedule main is never tested after a merge.
+  schedule:
+    - cron: '43 3 * * 1'
+  workflow_dispatch:
   push:
     branches: [ main ]
   pull_request:
